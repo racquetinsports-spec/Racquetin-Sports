@@ -17,6 +17,26 @@ import { fetchAllContent } from '../lib/api/content';
 import { renderLegalMarkdown } from '../utils/renderLegalMarkdown';
 import ProductCard from '../components/product/ProductCard';
 
+// Mirrors supabase/functions/create-razorpay-order/index.ts — for display
+// only. The server is the sole source of truth for the actual charge
+// (it recomputes independently and ignores anything the client sends);
+// this just lets the checkout page show a live, accurate-looking total
+// as the customer picks a delivery method, instead of a placeholder.
+// Keep these in sync with the Edge Function's constants by hand if either changes.
+const CHECKOUT_TAX_RATE = parseFloat(import.meta.env.VITE_TAX_RATE || '0.18');
+const CHECKOUT_FREE_SHIPPING_THRESHOLD = parseInt(import.meta.env.VITE_FREE_SHIPPING_THRESHOLD || '500000', 10) / 100;
+const CHECKOUT_STANDARD_SHIPPING = parseInt(import.meta.env.VITE_SHIPPING_COST || '8900', 10) / 100;
+const CHECKOUT_EXPRESS_SHIPPING = 799;
+const CHECKOUT_NEXT_DAY_SHIPPING = 1299;
+
+function estimateCheckoutTotals(subtotal, delivery) {
+  const shipping = delivery === 'exp' ? CHECKOUT_EXPRESS_SHIPPING
+    : delivery === 'nxt' ? CHECKOUT_NEXT_DAY_SHIPPING
+    : (subtotal >= CHECKOUT_FREE_SHIPPING_THRESHOLD ? 0 : CHECKOUT_STANDARD_SHIPPING);
+  const tax = Math.round(subtotal * CHECKOUT_TAX_RATE);
+  return { shipping, tax, total: subtotal + tax + shipping };
+}
+
 export function CartPage() {
   const { items, total, removeItem, updateQty } = useCart();
   return (
@@ -105,6 +125,7 @@ export function CheckoutPage() {
     address1: '', address2: '', city: '', postcode: '', country: 'India',
   });
   const [delivery, setDelivery] = useState('std');
+  const checkoutEstimate = estimateCheckoutTotals(total, delivery);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [demoOrder, setDemoOrder] = useState(false); // only used when Supabase isn't configured at all
@@ -288,12 +309,17 @@ export function CheckoutPage() {
             <span className="t-body">Subtotal</span><span>{formatPrice(total)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span className="t-body">Shipping</span><span className="t-small">Calculated at confirmation</span>
+            <span className="t-body">Shipping</span>
+            <span>{checkoutEstimate.shipping === 0 ? 'Free' : formatPrice(checkoutEstimate.shipping)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span className="t-body">Tax</span><span>{formatPrice(checkoutEstimate.tax)}</span>
           </div>
           <div className="divider" style={{ margin: '12px 0' }} />
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span className="t-h4">Total</span><span className="t-price">{formatPrice(total)}</span>
+            <span className="t-h4">Total</span><span className="t-price">{formatPrice(checkoutEstimate.total)}</span>
           </div>
+          <p className="t-small" style={{ marginTop: 8, opacity: .7 }}>Final amount is confirmed by the payment provider before you're charged.</p>
         </div>
       </div>
       )}
