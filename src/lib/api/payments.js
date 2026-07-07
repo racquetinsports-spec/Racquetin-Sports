@@ -22,6 +22,24 @@ function loadRazorpayScript() {
   });
 }
 
+// supabase-js's functions.invoke() gives you a generic error.message like
+// "Edge Function returned a non-2xx status code" when a function fails —
+// the actual { error: "..." } body our functions return is only available
+// by reading error.context (the underlying Response) separately. Without
+// this, every checkout failure looks identical and unhelpful on-screen,
+// no matter what actually went wrong server-side.
+async function extractFunctionError(error, fallback) {
+  try {
+    if (error?.context && typeof error.context.json === 'function') {
+      const body = await error.context.clone().json();
+      if (body?.error) return body.error;
+    }
+  } catch {
+    // Response wasn't JSON, or already consumed — fall through to the generic message below.
+  }
+  return error?.message || fallback;
+}
+
 // ── Step 1: ask the server to price the cart and create a Razorpay order ──
 // items: [{ productId, qty, variant }] — price is NOT sent; the server
 // re-looks-up every product's current price and ignores anything else.
@@ -29,7 +47,7 @@ export async function createRazorpayOrder({ items, shippingAddress, billingAddre
   const { data, error } = await supabase.functions.invoke('create-razorpay-order', {
     body: { items, shippingAddress, billingAddress, couponCode },
   });
-  if (error) return { data: null, error: { message: error.message || 'Could not start checkout' } };
+  if (error) return { data: null, error: { message: await extractFunctionError(error, 'Could not start checkout') } };
   if (data?.error) return { data: null, error: { message: data.error } };
   return { data, error: null };
 }
@@ -40,7 +58,7 @@ export async function verifyRazorpayPayment({ razorpay_payment_id, razorpay_orde
   const { data, error } = await supabase.functions.invoke('verify-razorpay-payment', {
     body: { razorpay_payment_id, razorpay_order_id, razorpay_signature },
   });
-  if (error) return { data: null, error: { message: error.message || 'Payment verification failed' } };
+  if (error) return { data: null, error: { message: await extractFunctionError(error, 'Payment verification failed') } };
   if (data?.error) return { data: null, error: { message: data.error } };
   return { data, error: null };
 }
