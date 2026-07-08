@@ -284,17 +284,21 @@ export default function Nav({ isHeroPage = false }) {
         }
         .nav-shell.nav-light { background: transparent; border-bottom-color: transparent; }
         .nav-shell.nav-scrolled { background: rgba(255,255,255,.98); border-bottom-color: var(--gr-5); }
-        .nav-inner { display:flex; align-items:center; justify-content:space-between; height:62px; }
+        .nav-inner { display:flex; align-items:center; justify-content:space-between; height:84px; }
 
         /* Logo */
         .nav-logo { display:flex; align-items:center; flex-shrink:0; }
         .nav-logo-img {
-          height: 34px;
+          height: 68px;
           width: auto;      /* never distort aspect ratio — height-only constraint */
+          max-width: none;  /* overrides the global img{max-width:100%} reset in global.css,
+                                which was silently capping this image's rendered width based
+                                on its flex parent — the actual reason prior height increases
+                                produced no visible change regardless of the value used. */
           display: block;
         }
         @media(max-width:640px){
-          .nav-logo-img { height: 24px; }
+          .nav-logo-img { height: 46px; }
         }
 
         /* Links */
