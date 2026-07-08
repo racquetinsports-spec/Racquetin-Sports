@@ -289,12 +289,12 @@ export default function Nav({ isHeroPage = false }) {
         /* Logo */
         .nav-logo { display:flex; align-items:center; flex-shrink:0; }
         .nav-logo-img {
-          height: 26px;
+          height: 34px;
           width: auto;      /* never distort aspect ratio — height-only constraint */
           display: block;
         }
         @media(max-width:640px){
-          .nav-logo-img { height: 20px; }
+          .nav-logo-img { height: 24px; }
         }
 
         /* Links */
