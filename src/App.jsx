@@ -116,7 +116,7 @@ export default function App() {
       <CartDrawer />
       <SearchOverlay />
 
-      <main style={{ paddingTop: isHome ? 0 : 68 }}>
+      <main style={{ paddingTop: isHome ? 0 : 62 }}>
         <Suspense fallback={<PageFallback />}>
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
