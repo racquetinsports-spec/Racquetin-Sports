@@ -103,12 +103,12 @@ export default function SearchOverlay() {
                     <div className="search-result-img">
                       {p.images?.[0] && <img src={p.images[0]} alt={p.name} style={{ width:'100%', height:'100%', objectFit:'contain', padding:'6%' }} />}
                     </div>
-                    <div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div className="search-result-name">{p.name}</div>
                       <div className="t-small">{p.category} · {formatPrice(p.price)}</div>
                     </div>
-                    <div className="search-result-price t-price" style={{ fontSize: 13, marginLeft: 'auto' }}>
-                      ${p.price}
+                    <div className="search-result-price t-price" style={{ fontSize: 13, marginLeft: 'auto', flexShrink: 0 }}>
+                      {formatPrice(p.price)}
                     </div>
                   </Link>
                 ))}
@@ -140,10 +140,17 @@ export default function SearchOverlay() {
             .search-result-item { display:flex; align-items:center; gap:14px; padding:12px 20px; transition:background .15s; }
             .search-result-item:hover { background:var(--gr-6); }
             .search-result-img { width:44px; height:44px; background:#fff; border:1px solid var(--gr-5); border-radius:var(--r-sm); flex-shrink:0; overflow:hidden; display:flex; align-items:center; justify-content:center; }
-            .search-result-name { font-size:13px; font-weight:600; }
+            .search-result-name { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
             .search-all { display:block; padding:14px 20px; font-size:12px; font-weight:500; color:var(--cr); border-top:1px solid var(--gr-5); }
             .search-all:hover { background:var(--gr-6); }
-            @media(max-width:680px){ .search-box { margin:60px 16px 0; } }
+            @media(max-width:680px){
+              .search-box { margin:60px 16px 0; }
+              /* Price already shows in the subtitle line on mobile — the
+                 separate right-aligned price becomes redundant clutter on
+                 a narrow row, so it's hidden there and kept on desktop
+                 where there's room for it as a scannable column. */
+              .search-result-price { display:none; }
+            }
           `}</style>
         </motion.div>
       )}

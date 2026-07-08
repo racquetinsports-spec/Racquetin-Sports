@@ -12,7 +12,6 @@ const CATEGORY_META = {
     desc: 'Professional and intermediate badminton rackets — Astrox, Arcsaber, Nanoflare, and Duora series.',
     maxPrice: 32000,
     filters: {
-      'Series':        ['Astrox', 'Arcsaber', 'Nanoflare', 'Duora'],
       'Skill Level':   ['Beginner', 'Intermediate', 'Advanced', 'Professional'],
       'Playing Style': ['Attacking', 'Defensive', 'All-Round'],
       'Balance':       ['Head-Heavy', 'Even Balance', 'Head-Light'],
@@ -95,31 +94,22 @@ function sortProducts(items, sort) {
   }
 }
 
-// Series badge colours for the racket category
-const SERIES_COLOURS = {
-  Astrox:    { bg: '#002B6B', fg: '#fff' },
-  Arcsaber:  { bg: '#0d0d0d', fg: '#fff' },
-  Nanoflare: { bg: '#1a1a1a', fg: '#fff' },
-  Duora:     { bg: '#2c2c2c', fg: '#fff' },
-};
-
-const SeriesTabs = memo(function SeriesTabs({ series, active, onSelect }) {
+const BrandTabs = memo(function BrandTabs({ brands, active, onSelect }) {
   return (
-    <div className="series-tabs">
+    <div className="brand-tabs">
       <button
-        className={`series-tab ${!active ? 'series-tab-active' : ''}`}
+        className={`brand-tab ${!active ? 'brand-tab-active' : ''}`}
         onClick={() => onSelect(null)}
       >
         All
       </button>
-      {series.map(s => (
+      {brands.map(b => (
         <button
-          key={s}
-          className={`series-tab ${active === s ? 'series-tab-active' : ''}`}
-          onClick={() => onSelect(active === s ? null : s)}
-          style={active === s ? { background: SERIES_COLOURS[s]?.bg || 'var(--bk)', color: SERIES_COLOURS[s]?.fg || '#fff', borderColor: 'transparent' } : {}}
+          key={b}
+          className={`brand-tab ${active === b ? 'brand-tab-active' : ''}`}
+          onClick={() => onSelect(active === b ? null : b)}
         >
-          {s}
+          {b}
         </button>
       ))}
     </div>
@@ -156,12 +146,15 @@ export default function CollectionPage({ category: categoryProp }) {
   const [activeFilters, setActiveFilters] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [priceRange, setPriceRange]   = useState([0, meta.maxPrice || 30000]);
-  const [activeSeries, setActiveSeries] = useState(null);
+  const [activeBrand, setActiveBrand] = useState(null);
 
-  // Derive available series for the racket series tabs
-  const availableSeries = useMemo(() => {
+  // Derive available brands dynamically from whatever products actually
+  // loaded — new brands (or new products under an existing brand) show up
+  // automatically here with no code change, unlike the old hardcoded
+  // Yonex-only Series list this replaced.
+  const availableBrands = useMemo(() => {
     if (category !== 'rackets') return [];
-    return [...new Set(allProducts.map(p => p.series).filter(Boolean))].sort();
+    return [...new Set(allProducts.map(p => p.brand).filter(Boolean))].sort();
   }, [allProducts, category]);
 
   const toggleFilter = (group, value) => {
@@ -175,20 +168,20 @@ export default function CollectionPage({ category: categoryProp }) {
   };
 
   const activeCount = Object.values(activeFilters).flat().filter(Boolean).length
-    + (activeSeries ? 1 : 0);
+    + (activeBrand ? 1 : 0);
 
   const clearAll = () => {
     setActiveFilters({});
-    setActiveSeries(null);
+    setActiveBrand(null);
     setPriceRange([0, meta.maxPrice || 30000]);
   };
 
   const filtered = useMemo(() => {
-    // Merge series tab into filter state for unified logic
+    // Merge the brand tab into filter state for unified logic
     const effectiveFilters = { ...activeFilters };
-    if (activeSeries) effectiveFilters['Series'] = [activeSeries];
+    if (activeBrand) effectiveFilters['Brand'] = [activeBrand];
     return filterProducts(allProducts, effectiveFilters, priceRange);
-  }, [allProducts, activeFilters, priceRange, activeSeries]);
+  }, [allProducts, activeFilters, priceRange, activeBrand]);
 
   const displayed = sortProducts(filtered, sort);
 
@@ -205,14 +198,14 @@ export default function CollectionPage({ category: categoryProp }) {
         </div>
       </div>
 
-      {/* Series tabs — rackets only */}
-      {category === 'rackets' && availableSeries.length > 0 && (
-        <div className="col-series-bar">
+      {/* Brand tabs — rackets only, computed dynamically from live product data */}
+      {category === 'rackets' && availableBrands.length > 0 && (
+        <div className="col-brand-bar">
           <div className="container">
-            <SeriesTabs
-              series={availableSeries}
-              active={activeSeries}
-              onSelect={setActiveSeries}
+            <BrandTabs
+              brands={availableBrands}
+              active={activeBrand}
+              onSelect={setActiveBrand}
             />
           </div>
         </div>
@@ -249,16 +242,33 @@ export default function CollectionPage({ category: categoryProp }) {
         </div>
 
         <div className="col-layout">
-          {/* Filter Sidebar */}
+          {/* Filter Sidebar — a fixed drawer on mobile (see .col-sidebar
+              media query below), an inline column on desktop; same
+              component and state either way, no separate mobile code path. */}
           <AnimatePresence>
             {sidebarOpen && (
-              <motion.aside
-                className="col-sidebar"
-                initial={{ opacity: 0, x: -16 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -16 }}
-                transition={{ duration: .22 }}
-              >
+              <>
+                <motion.div
+                  className="col-sidebar-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: .2 }}
+                  onClick={() => setSidebarOpen(false)}
+                />
+                <motion.aside
+                  className="col-sidebar"
+                  initial={{ opacity: 0, x: -16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  transition={{ duration: .22 }}
+                >
+                  <div className="col-sidebar-mobile-head">
+                    <span className="t-h4">Filters</span>
+                    <button className="col-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close filters">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
                 {Object.entries(meta.filters).map(([group, values]) => (
                   <div key={group} className="filter-group">
                     <div className="filter-group-head">{group}</div>
@@ -307,15 +317,22 @@ export default function CollectionPage({ category: categoryProp }) {
                   </button>
                 )}
               </motion.aside>
+              </>
             )}
           </AnimatePresence>
 
           {/* Product Grid */}
           <div className={`col-grid ${sidebarOpen ? 'col-grid-narrow' : 'col-grid-wide'}`}>
             {loading ? (
-              <div className="col-empty">
-                <p className="t-body">Loading products…</p>
-              </div>
+              <>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="pcard-skeleton">
+                    <div className="pcard-skeleton-img" />
+                    <div className="pcard-skeleton-line" style={{ width: '70%' }} />
+                    <div className="pcard-skeleton-line" style={{ width: '40%' }} />
+                  </div>
+                ))}
+              </>
             ) : loadError ? (
               <div className="col-empty">
                 <p className="t-h4">Couldn't load products</p>
@@ -345,11 +362,11 @@ export default function CollectionPage({ category: categoryProp }) {
       <style>{`
         .col-page { padding-bottom: 80px; }
         .col-hero { padding:48px 0 36px; border-bottom:1px solid var(--gr-5); }
-        .col-series-bar { border-bottom:1px solid var(--gr-5); background:var(--gr-6); }
-        .series-tabs { display:flex; gap:4px; padding:12px 0; overflow-x:auto; }
-        .series-tab { padding:7px 16px; font-size:12px; font-weight:600; letter-spacing:.04em; border:1.5px solid var(--gr-4); border-radius:100px; background:transparent; color:var(--bk); transition:var(--trans); white-space:nowrap; }
-        .series-tab:hover { border-color:var(--bk); }
-        .series-tab-active { background:var(--bk); color:var(--wh); border-color:var(--bk); }
+        .col-brand-bar { border-bottom:1px solid var(--gr-5); background:var(--gr-6); }
+        .brand-tabs { display:flex; gap:4px; padding:12px 0; overflow-x:auto; }
+        .brand-tab { padding:7px 16px; font-size:12px; font-weight:600; letter-spacing:.04em; border:1.5px solid var(--gr-4); border-radius:100px; background:transparent; color:var(--bk); transition:var(--trans); white-space:nowrap; }
+        .brand-tab:hover { border-color:var(--bk); }
+        .brand-tab-active { background:var(--bk); color:var(--wh); border-color:var(--bk); }
         .col-toolbar { display:flex; align-items:center; justify-content:space-between; padding:16px 0; border-bottom:1px solid var(--gr-5); margin-bottom:24px; }
         .col-filter-toggle { display:flex; align-items:center; gap:8px; }
         .col-sort { width:200px; font-size:12px; padding:8px 32px 8px 12px; }
@@ -357,10 +374,70 @@ export default function CollectionPage({ category: categoryProp }) {
         .col-clear-link:hover { color:var(--bk); }
         .col-layout { display:flex; gap:32px; align-items:flex-start; }
         .col-sidebar { width:220px; flex-shrink:0; padding-top:4px; }
+        .col-sidebar-backdrop { display:none; }
+        .col-sidebar-mobile-head { display:none; }
+        .col-sidebar-close { display:none; }
+        @media(max-width:860px){
+          .col-grid-narrow,.col-grid-wide{grid-template-columns:repeat(2,1fr);}
+
+          /* Filters become a fixed drawer sliding in from the left with
+             a tap-to-close backdrop, instead of being hidden entirely
+             (the old behaviour left mobile visitors with no way to
+             filter at all). Same component, same state — only the
+             positioning changes at this breakpoint. */
+          .col-sidebar {
+            display:block;
+            position:fixed; top:0; left:0; bottom:0;
+            width:82vw; max-width:340px;
+            background:var(--wh);
+            z-index:200;
+            padding:20px;
+            overflow-y:auto;
+            box-shadow:var(--shadow-md);
+          }
+          .col-sidebar-backdrop {
+            display:block;
+            position:fixed; inset:0;
+            background:rgba(0,0,0,.4);
+            z-index:190;
+          }
+          .col-sidebar-mobile-head {
+            display:flex; align-items:center; justify-content:space-between;
+            margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--gr-5);
+          }
+          .col-sidebar-close {
+            display:flex; align-items:center; justify-content:center;
+            width:32px; height:32px; border-radius:50%; color:var(--gr-1);
+          }
+          .col-sidebar-close:hover { background:var(--gr-6); }
+          /* The grid never needs the "narrow" variant on mobile — the
+             drawer floats above the page rather than sharing layout
+             width with it. */
+          .col-grid-narrow { grid-template-columns:repeat(2,1fr); }
+        }
+        @media(max-width:480px){
+          .col-grid-narrow,.col-grid-wide{grid-template-columns:1fr 1fr; gap:14px;}
+        }
+
         .col-grid { flex:1; display:grid; gap:24px; }
         .col-grid-narrow { grid-template-columns:repeat(3,1fr); }
         .col-grid-wide   { grid-template-columns:repeat(4,1fr); }
         .col-empty { grid-column:1/-1; text-align:center; padding:64px 0; }
+
+        /* Loading skeleton — mirrors .pcard's aspect-ratio:1 image area
+           so the grid doesn't jump in height once real cards replace it. */
+        .pcard-skeleton { display:flex; flex-direction:column; gap:10px; }
+        .pcard-skeleton-img { aspect-ratio:1; border-radius:var(--r-sm); background:var(--gr-6); overflow:hidden; position:relative; }
+        .pcard-skeleton-line { height:12px; border-radius:4px; background:var(--gr-6); overflow:hidden; position:relative; }
+        .pcard-skeleton-img::after, .pcard-skeleton-line::after {
+          content:''; position:absolute; inset:0;
+          background:linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent);
+          animation: pcard-shimmer 1.4s ease-in-out infinite;
+        }
+        @keyframes pcard-shimmer { 0%{transform:translateX(-100%);} 100%{transform:translateX(100%);} }
+        @media (prefers-reduced-motion: reduce) {
+          .pcard-skeleton-img::after, .pcard-skeleton-line::after { animation: none; }
+        }
         .filter-group { margin-bottom:24px; }
         .filter-group-head { font-size:10px; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--gr-2); margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--gr-5); }
         .filter-option { display:flex; align-items:center; gap:10px; padding:5px 0; font-size:13px; cursor:pointer; color:var(--gr-1); }
@@ -370,8 +447,7 @@ export default function CollectionPage({ category: categoryProp }) {
         .filter-price-row { display:flex; justify-content:space-between; margin-bottom:8px; }
         .filter-range { width:100%; accent-color:var(--cr); cursor:pointer; }
         @media(max-width:1100px){ .col-grid-narrow{grid-template-columns:repeat(2,1fr);} .col-grid-wide{grid-template-columns:repeat(3,1fr);} }
-        @media(max-width:860px){ .col-sidebar{display:none;} .col-grid-narrow,.col-grid-wide{grid-template-columns:repeat(2,1fr);} }
-        @media(max-width:540px){ .col-grid-narrow,.col-grid-wide{grid-template-columns:1fr 1fr; gap:12px;} }
+                @media(max-width:540px){ .col-grid-narrow,.col-grid-wide{grid-template-columns:1fr 1fr; gap:12px;} }
       `}</style>
     </div>
   );

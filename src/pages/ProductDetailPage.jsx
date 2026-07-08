@@ -71,13 +71,13 @@ export default function ProductDetailPage() {
   }, [id, navigate]);
 
   if (loading) return (
-    <div className="container" style={{ padding: '80px 48px', textAlign: 'center' }}>
+    <div className="container" style={{ padding: '80px 0', textAlign: 'center' }}>
       <p className="t-body">Loading product…</p>
     </div>
   );
 
   if (loadError || !product) return (
-    <div className="container" style={{ padding: '80px 48px', textAlign: 'center' }}>
+    <div className="container" style={{ padding: '80px 0', textAlign: 'center' }}>
       <h2 className="t-h2">Product not found</h2>
       <Link to="/rackets" className="btn btn-primary" style={{ marginTop: 24 }}>Browse Rackets</Link>
     </div>
@@ -127,6 +127,8 @@ export default function ProductDetailPage() {
                       src={img}
                       alt={`${product.name} view ${i + 1}`}
                       className="pdp-thumb-img"
+                      loading="lazy"
+                      decoding="async"
                       onError={() => markImageBroken(i)}
                     />
                   )}
@@ -146,6 +148,8 @@ export default function ProductDetailPage() {
                 src={product.images[activeImage] || product.images[0]}
                 alt={product.name}
                 className="pdp-hero-img"
+                fetchpriority="high"
+                decoding="async"
                 onError={() => markImageBroken(activeImage)}
               />
             ) : (
@@ -534,7 +538,17 @@ export default function ProductDetailPage() {
         .review-header { display:flex; align-items:center; gap:12px; }
         .review-avatar { width:32px; height:32px; border-radius:50%; background:var(--bk); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; flex-shrink:0; }
         .pdp-related { margin-top:64px; }
-        @media(max-width:900px){ .pdp-main{grid-template-columns:1fr; padding:0 20px;} .pdp-gallery{position:static;} .pdp-crumb{padding:16px 20px;} }
+        @media(max-width:900px){
+          .pdp-main{grid-template-columns:1fr; padding:0 20px;}
+          .pdp-gallery{position:static; flex-direction:column-reverse;}
+          .pdp-crumb{padding:16px 20px;}
+          /* Main image first (DOM has thumbs before it — column-reverse
+             flips the visual order), thumbnails become a horizontal
+             swipeable strip beneath it instead of a cramped side column
+             eating into a narrow screen's width. */
+          .pdp-gallery-thumbs{ flex-direction:row; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px; }
+          .pdp-gallery-thumbs .pdp-thumb{ flex-shrink:0; }
+        }
       `}</style>
     </div>
   );

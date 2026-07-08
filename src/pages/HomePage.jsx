@@ -244,13 +244,7 @@ function HeroCanvas({ heroText, heroCta }) {
     const loadGLB = async () => {
       try {
         const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
-        const { DRACOLoader } = await import('three/examples/jsm/loaders/DRACOLoader.js');
-        const dracoLoader = new DRACOLoader();
-        dracoLoader.setDecoderPath(
-          'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/'
-        );
         const loader = new GLTFLoader();
-        loader.setDRACOLoader(dracoLoader);
         loader.load(
           '/models/badminton-racket.glb',
           (gltf) => {
@@ -341,7 +335,17 @@ function HeroCanvas({ heroText, heroCta }) {
       }
 
       camera.position.set(S.cx, S.cy, S.cz);
-      camera.fov = S.fov;
+      // On a narrow/tall viewport (phones), the horizontal frustum of a
+      // perspective camera is squeezed by the low aspect ratio, which
+      // crops the racket's silhouette at the edges even though the
+      // vertical framing looks fine — this is why the hero previously
+      // felt oversized/cropped on mobile. Compensating with extra FOV
+      // only when aspect is narrow fixes that without touching any
+      // keyframe, timing, or desktop camera value: aspect >= 0.9 (any
+      // landscape/tablet/desktop view) gets zero adjustment.
+      const heroAspect = window.innerWidth / window.innerHeight;
+      const mobileFovBoost = heroAspect < 0.9 ? clamp((0.9 - heroAspect) / 0.5, 0, 1) * 12 : 0;
+      camera.fov = S.fov + mobileFovBoost;
       camera.updateProjectionMatrix();
       camera.lookAt(S.tx, S.ty, S.tz);
 
@@ -818,6 +822,23 @@ function HeroCanvas({ heroText, heroCta }) {
             max-width: 80vw;
           }
           .hero-sp-bc { bottom: clamp(80px, 12%, 130px); right: 20px; width: min(320px, 70vw); }
+
+          /* Guaranteed legibility on small screens regardless of what's
+             behind the text (racket, court lines) — a soft frosted
+             backdrop rather than relying purely on the vignette, since
+             mobile framing has much less predictable empty space around
+             the racket than desktop's wide aspect ratio does. Text
+             size/weight/color are untouched — only a backdrop is added. */
+          .hero-sp {
+            background: rgba(255,255,255,.72);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 14px 18px;
+            border-radius: 14px;
+          }
+        }
+        @media (max-width: 380px) {
+          .hero-sp-bc { right: 14px; width: min(260px, 74vw); bottom: clamp(70px, 11%, 110px); }
         }
       `}</style>
     </div>

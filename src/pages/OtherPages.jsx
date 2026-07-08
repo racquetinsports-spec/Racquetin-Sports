@@ -40,7 +40,7 @@ function estimateCheckoutTotals(subtotal, delivery) {
 export function CartPage() {
   const { items, total, removeItem, updateQty } = useCart();
   return (
-    <div className="container" style={{ padding: '40px 48px 80px' }}>
+    <div className="container" style={{ padding: '40px 0 80px' }}>
       <h1 className="t-h1" style={{ marginBottom: 32 }}>Your Cart</h1>
       {items.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '64px 0' }}>
@@ -203,7 +203,7 @@ export function CheckoutPage() {
 
   if (demoOrder) {
     return (
-      <div className="container" style={{ padding: '80px 48px', textAlign: 'center' }}>
+      <div className="container" style={{ padding: '80px 0', textAlign: 'center' }}>
         <h1 className="t-h1" style={{ marginBottom: 12 }}>Order placed</h1>
         <p className="t-body" style={{ marginBottom: 32 }}>
           This is a demo order — connect Supabase to process real, verified payments.
@@ -217,7 +217,7 @@ export function CheckoutPage() {
   }
 
   return (
-    <div className="container" style={{ padding: '40px 48px 80px' }}>
+    <div className="container" style={{ padding: '40px 0 80px' }}>
       <h1 className="t-h1" style={{ marginBottom: 40 }}>Checkout</h1>
       {items.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '64px 0' }}>
@@ -361,11 +361,11 @@ export function OrderConfirmationPage() {
     .toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
 
   if (loading) {
-    return <div className="container" style={{ padding: '80px 48px', textAlign: 'center' }}><p className="t-body">Loading your order…</p></div>;
+    return <div className="container" style={{ padding: '80px 0', textAlign: 'center' }}><p className="t-body">Loading your order…</p></div>;
   }
   if (loadError || !order) {
     return (
-      <div className="container" style={{ padding: '80px 48px', textAlign: 'center' }}>
+      <div className="container" style={{ padding: '80px 0', textAlign: 'center' }}>
         <h1 className="t-h2" style={{ marginBottom: 12 }}>Order not found</h1>
         <p className="t-body" style={{ marginBottom: 24 }}>{loadError}</p>
         <Link to="/account" className="btn btn-primary">View Order History</Link>
@@ -431,7 +431,7 @@ export function WishlistPage() {
   }, [ids, idsLoading]);
 
   return (
-    <div className="container" style={{ padding: '40px 48px 80px' }}>
+    <div className="container" style={{ padding: '40px 0 80px' }}>
       <h1 className="t-h1" style={{ marginBottom: 8 }}>Wishlist</h1>
       <p className="t-body" style={{ marginBottom: 40 }}>
         {loading ? 'Loading…' : `${products.length} saved item${products.length !== 1 ? 's' : ''}`}
@@ -486,7 +486,7 @@ export function SearchPage() {
   }, [q]);
 
   return (
-    <div className="container" style={{ padding: '40px 48px 80px' }}>
+    <div className="container" style={{ padding: '40px 0 80px' }}>
       <h1 className="t-h1" style={{ marginBottom: 8 }}>
         {q ? `Results for "${q}"` : 'Search'}
       </h1>
@@ -536,7 +536,7 @@ export function TechnologyPage() {
         </div>
       </div>
       {techs.map((t, i) => (
-        <div key={t.name} className="container" style={{ padding: '72px 48px', borderBottom: '1px solid var(--gr-5)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, alignItems: 'center', direction: i % 2 === 1 ? 'rtl' : 'ltr' }}>
+        <div key={t.name} className="container" style={{ padding: '72px 0', borderBottom: '1px solid var(--gr-5)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, alignItems: 'center', direction: i % 2 === 1 ? 'rtl' : 'ltr' }}>
           <div style={{ direction: 'ltr' }}>
             <div className="eyebrow">{t.tagline}</div>
             <h2 className="t-h2" style={{ marginBottom: 16 }}>{t.name}</h2>
@@ -815,11 +815,11 @@ export function AccountPage() {
   }, [authLoading, user, redirect, navigate]);
 
   if (authLoading || !user) {
-    return <div className="container-sm" style={{ padding: '80px 48px', textAlign: 'center' }}><p className="t-body">Loading…</p></div>;
+    return <div className="container-sm" style={{ padding: '80px 0', textAlign: 'center' }}><p className="t-body">Loading…</p></div>;
   }
 
   return (
-    <div className="container-sm" style={{ padding: '60px 48px 80px' }}>
+    <div className="container-sm" style={{ padding: '60px 0 80px' }}>
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
           <div>
