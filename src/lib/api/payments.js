@@ -63,10 +63,25 @@ export async function verifyRazorpayPayment({ razorpay_payment_id, razorpay_orde
   return { data, error: null };
 }
 
+// ── Poll whether an order was already fulfilled in the background ──
+// Used specifically when the Checkout modal's dismiss event fires
+// ambiguously (see initiatePayment below) — never used to decide
+// whether to trust a payment; it only asks the server what it already
+// knows, and the server's answer comes from real signature-verified
+// fulfillment, not from anything the client asserts.
+export async function checkPaymentStatus(providerOrderId) {
+  const { data, error } = await supabase.functions.invoke('check-payment-status', {
+    body: { provider_order_id: providerOrderId },
+  });
+  if (error) return { data: null, error: { message: await extractFunctionError(error, 'Could not check payment status') } };
+  if (data?.error) return { data: null, error: { message: data.error } };
+  return { data, error: null };
+}
+
 // ── Open the Razorpay Checkout modal ──────────────────────────────
 // amount/orderId here always come from createRazorpayOrder() above —
 // never computed client-side.
-export async function initiatePayment({ amount, currency = 'INR', orderId, customerName, customerEmail, customerPhone, description, onSuccess, onFailure }) {
+export async function initiatePayment({ amount, currency = 'INR', orderId, customerName, customerEmail, customerPhone, description, onSuccess, onFailure, onDismiss }) {
   if (!RAZORPAY_KEY_ID) {
     console.warn('[RacquetIn] VITE_RAZORPAY_KEY_ID not set. Payment will not work.');
     onFailure?.({ error: { description: 'Payment gateway not configured' } });
@@ -93,7 +108,10 @@ export async function initiatePayment({ amount, currency = 'INR', orderId, custo
     },
     theme: { color: '#002B6B' },
     modal: {
-      ondismiss: () => onFailure?.({ error: { description: 'Payment cancelled' } }),
+      // Ambiguous on mobile: can mean a genuine cancel, but also fires
+      // when a NetBanking/OTP flow backgrounds the tab mid-payment —
+      // handled separately from a definitive payment.failed event below.
+      ondismiss: () => onDismiss?.(),
     },
     handler: (response) => {
       // response.razorpay_payment_id, response.razorpay_order_id, response.razorpay_signature
@@ -104,6 +122,6 @@ export async function initiatePayment({ amount, currency = 'INR', orderId, custo
   };
 
   const rzp = new window.Razorpay(options);
-  rzp.on('payment.failed', onFailure);
+  rzp.on('payment.failed', onFailure); // definitive failure — no ambiguity, no polling needed
   rzp.open();
 }

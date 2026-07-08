@@ -1,12 +1,12 @@
 // ── All Pages ─────────────────────────────────────────────────────
 import { Link, useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { formatPrice } from '../utils/format';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCart } from '../hooks/useCart';
 import { useWishlist } from '../hooks/useWishlist';
 import { useAuth } from '../hooks/useAuth';
 import { signOut } from '../lib/auth';
-import { initiatePayment, createRazorpayOrder, verifyRazorpayPayment, loadRazorpayScript } from '../lib/api/payments';
+import { initiatePayment, createRazorpayOrder, verifyRazorpayPayment, loadRazorpayScript, checkPaymentStatus } from '../lib/api/payments';
 import { fetchOrders, fetchOrderById } from '../lib/api/orders';
 import { fetchMyShipments } from '../lib/api/shipments';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -138,6 +138,7 @@ export function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [demoOrder, setDemoOrder] = useState(false); // only used when Supabase isn't configured at all
+  const pendingOrderIdRef = useRef(null); // current Razorpay order_id, for the dismiss-poll below
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
@@ -163,10 +164,38 @@ export function CheckoutPage() {
   }
 
   function handlePaymentFailure(err) {
-    // "Keep cart intact, do not create an order, display retry payment" —
-    // nothing is cleared or created here; the Complete Order button
-    // below is the retry action, unchanged and still clickable.
-    setError(err?.error?.description || 'Payment failed or was cancelled. Your cart has been kept — you can try again.');
+    // A definitive failure (e.g. a declined card) — unambiguous, no
+    // need to check whether it actually succeeded elsewhere.
+    setError(err?.error?.description || 'Payment failed. Your cart has been kept — you can try again.');
+    setSubmitting(false);
+  }
+
+  // The modal's dismiss event is ambiguous on mobile: it fires for a
+  // genuine cancel, but it ALSO fires when a NetBanking/OTP redirect
+  // backgrounds the browser tab — the payment can still be completing
+  // via the webhook even though the modal appears to have closed. This
+  // is what was showing up as "redirected back to checkout" with no
+  // result. Poll briefly for the order having been fulfilled in the
+  // background before assuming the payment was actually cancelled.
+  async function handleModalDismiss() {
+    const orderId = pendingOrderIdRef.current;
+    if (!orderId) {
+      setError('Payment cancelled. Your cart has been kept — you can try again.');
+      setSubmitting(false);
+      return;
+    }
+    setError('Confirming your payment status…');
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const { data } = await checkPaymentStatus(orderId);
+      if (data?.fulfilled) {
+        await clearCart();
+        setSubmitting(false);
+        navigate(`/order-confirmation/${data.orderId}`);
+        return;
+      }
+    }
+    setError('Payment cancelled. Your cart has been kept — you can try again.');
     setSubmitting(false);
   }
 
@@ -194,6 +223,7 @@ export function CheckoutPage() {
       shippingAddress: { ...form, delivery },
     });
     if (createError) { setError(createError.message || 'Could not start checkout.'); setSubmitting(false); return; }
+    pendingOrderIdRef.current = rpOrder.order_id;
 
     // Step 2 — open Razorpay Checkout using the server-issued order id
     // and server-computed amount, not anything computed in this component.
@@ -207,6 +237,7 @@ export function CheckoutPage() {
       description: `RacquetIn order — ${items.length} item${items.length !== 1 ? 's' : ''}`,
       onSuccess: handlePaymentSuccess,
       onFailure: handlePaymentFailure,
+      onDismiss: handleModalDismiss,
     });
   }
 

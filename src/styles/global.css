@@ -287,8 +287,8 @@ ul  { list-style: none; }
   .grid-4 { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 860px) {
-  .container { padding: 0 20px; }
-  .container-sm { padding: 0 20px; }
+  .container { padding: 0 24px; }
+  .container-sm { padding: 0 24px; }
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
   .grid-3 { grid-template-columns: repeat(2, 1fr); }
   .section { padding: 56px 0; }

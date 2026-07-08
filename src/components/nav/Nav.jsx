@@ -284,17 +284,17 @@ export default function Nav({ isHeroPage = false }) {
         }
         .nav-shell.nav-light { background: transparent; border-bottom-color: transparent; }
         .nav-shell.nav-scrolled { background: rgba(255,255,255,.98); border-bottom-color: var(--gr-5); }
-        .nav-inner { display:flex; align-items:center; justify-content:space-between; height:58px; }
+        .nav-inner { display:flex; align-items:center; justify-content:space-between; height:68px; }
 
         /* Logo */
         .nav-logo { display:flex; align-items:center; flex-shrink:0; }
         .nav-logo-img {
-          height: 28px;
+          height: 50px;
           width: auto;      /* never distort aspect ratio — height-only constraint */
           display: block;
         }
         @media(max-width:640px){
-          .nav-logo-img { height: 22px; }
+          .nav-logo-img { height: 40px; }
         }
 
         /* Links */
