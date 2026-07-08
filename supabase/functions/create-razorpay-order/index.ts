@@ -11,9 +11,19 @@ import { handleOptions, jsonResponse } from '../_shared/cors.ts';
 import { getAdminClient, getRequestUser } from '../_shared/supabaseClients.ts';
 import { createRazorpayOrder } from '../_shared/razorpay.ts';
 
+// TAX_RATE/FREE_SHIPPING_THRESHOLD/SHIPPING_COST are documented (and
+// read from .env.example) as paise, matching Razorpay's own convention —
+// but products.price is plain rupees, so they're converted to rupees once
+// here, right alongside where that assumption is defined, rather than
+// mixing units throughout the calculation below.
 const TAX_RATE = parseFloat(Deno.env.get('TAX_RATE') || '0.18');
-const FREE_SHIPPING_THRESHOLD = parseInt(Deno.env.get('FREE_SHIPPING_THRESHOLD') || '500000', 10); // paise
-const SHIPPING_COST = parseInt(Deno.env.get('SHIPPING_COST') || '8900', 10); // paise
+const FREE_SHIPPING_THRESHOLD_RUPEES = parseInt(Deno.env.get('FREE_SHIPPING_THRESHOLD') || '500000', 10) / 100;
+const STANDARD_SHIPPING_RUPEES = parseInt(Deno.env.get('SHIPPING_COST') || '8900', 10) / 100;
+// Matches the amounts already shown on the checkout page's delivery
+// method options — previously decorative only, since shipping cost never
+// actually varied by which one was selected.
+const EXPRESS_SHIPPING_RUPEES = 799;
+const NEXT_DAY_SHIPPING_RUPEES = 1299;
 const RAZORPAY_KEY_ID = Deno.env.get('RAZORPAY_KEY_ID')!;
 
 Deno.serve(async (req) => {
@@ -45,11 +55,28 @@ Deno.serve(async (req) => {
       const qty = Math.max(1, parseInt(raw.qty, 10) || 1);
       if (!slugOrId) return jsonResponse({ error: 'Each item needs a productId' }, 400);
 
-      const { data: product, error: productError } = await admin
-        .from('products')
-        .select('id, slug, name, price, stock, is_active, product_images(url, is_primary, sort_order)')
-        .or(`id.eq.${slugOrId},slug.eq.${slugOrId}`)
-        .maybeSingle();
+      // Look up by slug — every cart item's productId from the frontend
+      // is a slug, never a raw UUID (see the app-wide convention in
+      // src/utils/normalizeProduct.js). `id` is a UUID column, so a
+      // combined `.or('id.eq.X,slug.eq.X')` filter here would throw a
+      // Postgres "invalid input syntax for type uuid" error the instant
+      // X isn't UUID-shaped — which is always, since slugs never are.
+      // This is the exact same bug that was fixed in fetchProductById()
+      // on the frontend; fixed the same way here: query by slug alone,
+      // and only attempt an id-based lookup if the string actually
+      // looks like a UUID.
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId);
+      let product = null, productError = null;
+      const selectClause = 'id, slug, name, price, stock, is_active, product_images(url, is_primary, sort_order)';
+
+      const bySlug = await admin.from('products').select(selectClause).eq('slug', slugOrId).maybeSingle();
+      if (bySlug.error) productError = bySlug.error;
+      else if (bySlug.data) product = bySlug.data;
+      else if (isUuid) {
+        const byId = await admin.from('products').select(selectClause).eq('id', slugOrId).maybeSingle();
+        if (byId.error) productError = byId.error;
+        else product = byId.data;
+      }
 
       if (productError || !product) {
         return jsonResponse({ error: `Product not found: ${slugOrId}` }, 400);
@@ -75,11 +102,41 @@ Deno.serve(async (req) => {
       });
     }
 
-    const subtotal = pricedItems.reduce((sum, i) => sum + i.price * i.qty, 0);
-    const tax = Math.round(subtotal * TAX_RATE);
-    const shippingCost = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
-    const discount = 0; // coupon logic can compute a real value here later; structure is already in place
-    const total = subtotal + tax + shippingCost - discount;
+    const subtotalRupees = pricedItems.reduce((sum, i) => sum + i.price * i.qty, 0);
+    const taxRupees = Math.round(subtotalRupees * TAX_RATE);
+
+    // Shipping now actually reflects which delivery method was selected —
+    // previously this only ever checked the free-shipping threshold and
+    // ignored the choice entirely, so Express/Next Day never cost anything
+    // extra despite what the checkout UI displayed.
+    const deliveryMethod = shippingAddress?.delivery || 'std';
+    let shippingCostRupees;
+    if (deliveryMethod === 'exp') shippingCostRupees = EXPRESS_SHIPPING_RUPEES;
+    else if (deliveryMethod === 'nxt') shippingCostRupees = NEXT_DAY_SHIPPING_RUPEES;
+    else shippingCostRupees = subtotalRupees >= FREE_SHIPPING_THRESHOLD_RUPEES ? 0 : STANDARD_SHIPPING_RUPEES;
+
+    const discountRupees = 0; // coupon logic can compute a real value here later; structure is already in place
+    const totalRupees = subtotalRupees + taxRupees + shippingCostRupees - discountRupees;
+
+    // products.price (and therefore every figure above) is stored in plain
+    // rupees — matching the convention used everywhere else in this app
+    // (cart, product pages, admin product list). But orders.total,
+    // orders.subtotal/tax/shipping_cost, and payments.amount are all read
+    // elsewhere (admin Orders page, order confirmation page, account page)
+    // by dividing by 100 — i.e. those columns are meant to hold paise, the
+    // same unit Razorpay's own API requires. This was the actual bug: this
+    // function was computing everything in rupees and hoping downstream
+    // dividers treated it as paise, so a real order total of ₹39,578 was
+    // charged as ₹395.78 (39578 paise). Converting once, right here, to
+    // paise for every aggregate figure — but NOT for the per-item `price`
+    // above, which order_items.price already displays without dividing —
+    // fixes it at the one place all three (Razorpay, DB storage, and
+    // display) actually agree on.
+    const subtotal = Math.round(subtotalRupees * 100);
+    const tax = Math.round(taxRupees * 100);
+    const shippingCost = Math.round(shippingCostRupees * 100);
+    const discount = Math.round(discountRupees * 100);
+    const total = Math.round(totalRupees * 100);
 
     if (total <= 0) return jsonResponse({ error: 'Order total must be greater than zero' }, 400);
 

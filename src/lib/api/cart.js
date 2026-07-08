@@ -46,13 +46,20 @@ export async function addToCart(productId, qty = 1, variant = {}) {
     return { data: null, error: { message: 'This product isn\'t available online yet. Try again shortly.' } };
   }
 
-  const { data: existing } = await supabase
+  // Compare variants client-side rather than filtering on the JSONB
+  // column directly — .eq('variant', variant) with variant as a plain
+  // JS object serializes to the literal string "[object Object]" in
+  // the query string (not JSON), which Postgres then rejects with a
+  // 400. A user's cart rows for one product are always a handful at
+  // most, so fetching them and comparing here is both correct and cheap.
+  const { data: existingItems } = await supabase
     .from('cart_items')
-    .select('id, qty')
+    .select('id, qty, variant')
     .eq('user_id', user.id)
-    .eq('product_id', resolvedId)
-    .eq('variant', variant)
-    .single();
+    .eq('product_id', resolvedId);
+
+  const variantKey = JSON.stringify(variant || {});
+  const existing = (existingItems || []).find(i => JSON.stringify(i.variant || {}) === variantKey);
 
   if (existing) {
     const { data, error } = await supabase

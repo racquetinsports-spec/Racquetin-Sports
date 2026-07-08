@@ -8,6 +8,7 @@
 // duplicate — Razorpay webhooks and client verification can both
 // arrive for the same payment, sometimes more than once.
 import { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import { sendOrderConfirmationEmail } from './email.ts';
 
 export async function fulfillOrderFromIntent({
   admin, providerOrderId, providerPaymentId, paymentMethod, rawPayment,
@@ -126,6 +127,24 @@ export async function fulfillOrderFromIntent({
 
   // 7. Mark the intent consumed so a duplicate webhook/verify call is a no-op.
   await admin.from('payment_intents').update({ status: 'consumed', consumed_at: new Date().toISOString() }).eq('id', intent.id);
+
+  // 8. Order confirmation email — best-effort only. A failed send here
+  // must never undo or fail the order itself; the order has already
+  // been created, paid, and inventory adjusted by this point.
+  try {
+    const { data: customer } = await admin.from('customers').select('email, full_name').eq('user_id', intent.user_id).maybeSingle();
+    if (customer?.email) {
+      await sendOrderConfirmationEmail({
+        toEmail: customer.email,
+        toName: customer.full_name,
+        order: { order_number: order.order_number, total: order.total, payment_method: paymentMethod, created_at: order.created_at },
+        items: items.map(i => ({ name: i.name, price: i.price, qty: i.qty })),
+      });
+    }
+  } catch {
+    // Swallow — order fulfillment already succeeded above and must not
+    // be affected by an email provider outage or misconfiguration.
+  }
 
   return { order, alreadyFulfilled: false, error: null };
 }
