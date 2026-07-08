@@ -140,7 +140,7 @@ export default function Nav({ isHeroPage = false }) {
         <div className="nav-inner container">
           {/* Logo */}
           <Link to="/" className="nav-logo" onClick={() => setMegaMenu(null)}>
-            <span className="nav-wordmark">Racquet<span className="nav-wordmark-accent">In</span></span>
+            <img src="/images/logo-racquetin.png" alt="RacquetIn" className="nav-logo-img" />
           </Link>
 
           {/* Main links */}
@@ -253,7 +253,7 @@ export default function Nav({ isHeroPage = false }) {
           >
             <div className="mobile-nav-header">
               <Link to="/" className="nav-logo" onClick={() => setMobileOpen(false)}>
-                <span className="nav-wordmark">Racquet<span className="nav-wordmark-accent">In</span></span>
+                <img src="/images/logo-racquetin.png" alt="RacquetIn" className="nav-logo-img" />
               </Link>
               <button onClick={() => setMobileOpen(false)} className="mobile-close" aria-label="Close menu">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -288,16 +288,14 @@ export default function Nav({ isHeroPage = false }) {
 
         /* Logo */
         .nav-logo { display:flex; align-items:center; flex-shrink:0; }
-        .nav-wordmark {
-          font-family: var(--f);
-          font-size: 19px;
-          font-weight: 700;
-          letter-spacing: -0.01em;
-          color: var(--bk);
-          line-height: 1;
-          white-space: nowrap;
+        .nav-logo-img {
+          height: 28px;
+          width: auto;      /* never distort aspect ratio — height-only constraint */
+          display: block;
         }
-        .nav-wordmark-accent { color: var(--cr); }
+        @media(max-width:640px){
+          .nav-logo-img { height: 22px; }
+        }
 
         /* Links */
         .nav-links { display:flex; align-items:center; gap:2px; }

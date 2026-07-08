@@ -144,7 +144,10 @@ export default function CollectionPage({ category: categoryProp }) {
 
   const [sort, setSort]               = useState('featured');
   const [activeFilters, setActiveFilters] = useState({});
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Sidebar defaults open on desktop (unchanged prior behaviour — it's
+  // just an inline column there) but closed on mobile, where it's now a
+  // fixed drawer that would otherwise cover the whole screen on load.
+  const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth > 860 : true);
   const [priceRange, setPriceRange]   = useState([0, meta.maxPrice || 30000]);
   const [activeBrand, setActiveBrand] = useState(null);
 
@@ -244,7 +247,7 @@ export default function CollectionPage({ category: categoryProp }) {
         <div className="col-layout">
           {/* Filter Sidebar — a fixed drawer on mobile (see .col-sidebar
               media query below), an inline column on desktop; same
-              component and state either way, no separate mobile code path. */}
+              component and state either way. */}
           <AnimatePresence>
             {sidebarOpen && (
               <>
@@ -324,15 +327,9 @@ export default function CollectionPage({ category: categoryProp }) {
           {/* Product Grid */}
           <div className={`col-grid ${sidebarOpen ? 'col-grid-narrow' : 'col-grid-wide'}`}>
             {loading ? (
-              <>
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="pcard-skeleton">
-                    <div className="pcard-skeleton-img" />
-                    <div className="pcard-skeleton-line" style={{ width: '70%' }} />
-                    <div className="pcard-skeleton-line" style={{ width: '40%' }} />
-                  </div>
-                ))}
-              </>
+              <div className="col-empty">
+                <p className="t-body">Loading products…</p>
+              </div>
             ) : loadError ? (
               <div className="col-empty">
                 <p className="t-h4">Couldn't load products</p>
@@ -377,14 +374,26 @@ export default function CollectionPage({ category: categoryProp }) {
         .col-sidebar-backdrop { display:none; }
         .col-sidebar-mobile-head { display:none; }
         .col-sidebar-close { display:none; }
+        .col-grid { flex:1; display:grid; gap:24px; }
+        .col-grid-narrow { grid-template-columns:repeat(3,1fr); }
+        .col-grid-wide   { grid-template-columns:repeat(4,1fr); }
+        .col-empty { grid-column:1/-1; text-align:center; padding:64px 0; }
+        .filter-group { margin-bottom:24px; }
+        .filter-group-head { font-size:10px; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--gr-2); margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--gr-5); }
+        .filter-option { display:flex; align-items:center; gap:10px; padding:5px 0; font-size:13px; cursor:pointer; color:var(--gr-1); }
+        .filter-option:hover, .filter-option-active { color:var(--bk); }
+        .filter-option-active { font-weight:500; }
+        .filter-check { width:14px; height:14px; accent-color:var(--cr); cursor:pointer; flex-shrink:0; }
+        .filter-price-row { display:flex; justify-content:space-between; margin-bottom:8px; }
+        .filter-range { width:100%; accent-color:var(--cr); cursor:pointer; }
+        @media(max-width:1100px){ .col-grid-narrow{grid-template-columns:repeat(2,1fr);} .col-grid-wide{grid-template-columns:repeat(3,1fr);} }
         @media(max-width:860px){
           .col-grid-narrow,.col-grid-wide{grid-template-columns:repeat(2,1fr);}
 
-          /* Filters become a fixed drawer sliding in from the left with
-             a tap-to-close backdrop, instead of being hidden entirely
-             (the old behaviour left mobile visitors with no way to
-             filter at all). Same component, same state — only the
-             positioning changes at this breakpoint. */
+          /* Filters become a fixed, scrollable drawer sliding in from the
+             left with a tap-to-close backdrop, instead of being hidden
+             entirely — the previous behaviour left mobile visitors with
+             no way to filter at all. */
           .col-sidebar {
             display:block;
             position:fixed; top:0; left:0; bottom:0;
@@ -392,7 +401,10 @@ export default function CollectionPage({ category: categoryProp }) {
             background:var(--wh);
             z-index:200;
             padding:20px;
+            padding-top:calc(20px + env(safe-area-inset-top));
+            padding-bottom:calc(24px + env(safe-area-inset-bottom));
             overflow-y:auto;
+            -webkit-overflow-scrolling:touch;
             box-shadow:var(--shadow-md);
           }
           .col-sidebar-backdrop {
@@ -404,50 +416,15 @@ export default function CollectionPage({ category: categoryProp }) {
           .col-sidebar-mobile-head {
             display:flex; align-items:center; justify-content:space-between;
             margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--gr-5);
+            position:sticky; top:0; background:var(--wh);
           }
           .col-sidebar-close {
             display:flex; align-items:center; justify-content:center;
             width:32px; height:32px; border-radius:50%; color:var(--gr-1);
           }
           .col-sidebar-close:hover { background:var(--gr-6); }
-          /* The grid never needs the "narrow" variant on mobile — the
-             drawer floats above the page rather than sharing layout
-             width with it. */
-          .col-grid-narrow { grid-template-columns:repeat(2,1fr); }
         }
-        @media(max-width:480px){
-          .col-grid-narrow,.col-grid-wide{grid-template-columns:1fr 1fr; gap:14px;}
-        }
-
-        .col-grid { flex:1; display:grid; gap:24px; }
-        .col-grid-narrow { grid-template-columns:repeat(3,1fr); }
-        .col-grid-wide   { grid-template-columns:repeat(4,1fr); }
-        .col-empty { grid-column:1/-1; text-align:center; padding:64px 0; }
-
-        /* Loading skeleton — mirrors .pcard's aspect-ratio:1 image area
-           so the grid doesn't jump in height once real cards replace it. */
-        .pcard-skeleton { display:flex; flex-direction:column; gap:10px; }
-        .pcard-skeleton-img { aspect-ratio:1; border-radius:var(--r-sm); background:var(--gr-6); overflow:hidden; position:relative; }
-        .pcard-skeleton-line { height:12px; border-radius:4px; background:var(--gr-6); overflow:hidden; position:relative; }
-        .pcard-skeleton-img::after, .pcard-skeleton-line::after {
-          content:''; position:absolute; inset:0;
-          background:linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent);
-          animation: pcard-shimmer 1.4s ease-in-out infinite;
-        }
-        @keyframes pcard-shimmer { 0%{transform:translateX(-100%);} 100%{transform:translateX(100%);} }
-        @media (prefers-reduced-motion: reduce) {
-          .pcard-skeleton-img::after, .pcard-skeleton-line::after { animation: none; }
-        }
-        .filter-group { margin-bottom:24px; }
-        .filter-group-head { font-size:10px; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--gr-2); margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--gr-5); }
-        .filter-option { display:flex; align-items:center; gap:10px; padding:5px 0; font-size:13px; cursor:pointer; color:var(--gr-1); }
-        .filter-option:hover, .filter-option-active { color:var(--bk); }
-        .filter-option-active { font-weight:500; }
-        .filter-check { width:14px; height:14px; accent-color:var(--cr); cursor:pointer; flex-shrink:0; }
-        .filter-price-row { display:flex; justify-content:space-between; margin-bottom:8px; }
-        .filter-range { width:100%; accent-color:var(--cr); cursor:pointer; }
-        @media(max-width:1100px){ .col-grid-narrow{grid-template-columns:repeat(2,1fr);} .col-grid-wide{grid-template-columns:repeat(3,1fr);} }
-                @media(max-width:540px){ .col-grid-narrow,.col-grid-wide{grid-template-columns:1fr 1fr; gap:12px;} }
+        @media(max-width:540px){ .col-grid-narrow,.col-grid-wide{grid-template-columns:1fr 1fr; gap:12px;} }
       `}</style>
     </div>
   );

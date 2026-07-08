@@ -538,17 +538,7 @@ export default function ProductDetailPage() {
         .review-header { display:flex; align-items:center; gap:12px; }
         .review-avatar { width:32px; height:32px; border-radius:50%; background:var(--bk); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; flex-shrink:0; }
         .pdp-related { margin-top:64px; }
-        @media(max-width:900px){
-          .pdp-main{grid-template-columns:1fr; padding:0 20px;}
-          .pdp-gallery{position:static; flex-direction:column-reverse;}
-          .pdp-crumb{padding:16px 20px;}
-          /* Main image first (DOM has thumbs before it — column-reverse
-             flips the visual order), thumbnails become a horizontal
-             swipeable strip beneath it instead of a cramped side column
-             eating into a narrow screen's width. */
-          .pdp-gallery-thumbs{ flex-direction:row; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px; }
-          .pdp-gallery-thumbs .pdp-thumb{ flex-shrink:0; }
-        }
+        @media(max-width:900px){ .pdp-main{grid-template-columns:1fr; padding:0 20px;} .pdp-gallery{position:static;} .pdp-crumb{padding:16px 20px;} }
       `}</style>
     </div>
   );

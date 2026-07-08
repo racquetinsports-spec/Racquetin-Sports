@@ -6,7 +6,7 @@ import { useCart } from '../hooks/useCart';
 import { useWishlist } from '../hooks/useWishlist';
 import { useAuth } from '../hooks/useAuth';
 import { signOut } from '../lib/auth';
-import { initiatePayment, createRazorpayOrder, verifyRazorpayPayment } from '../lib/api/payments';
+import { initiatePayment, createRazorpayOrder, verifyRazorpayPayment, loadRazorpayScript } from '../lib/api/payments';
 import { fetchOrders, fetchOrderById } from '../lib/api/orders';
 import { fetchMyShipments } from '../lib/api/shipments';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -119,6 +119,15 @@ export function CheckoutPage() {
   const { items, total, clearCart } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Preload Razorpay's checkout script as soon as this page mounts,
+  // instead of waiting until the user taps "Complete Order". On mobile
+  // Safari especially, opening the payment modal long after the
+  // original tap (e.g. after two sequential network round trips —
+  // script load + order creation) can lose the "trusted user gesture"
+  // association and get blocked. Preloading removes one of those two
+  // delays entirely.
+  useEffect(() => { loadRazorpayScript(); }, []);
 
   const [form, setForm] = useState({
     firstName: '', lastName: '', email: user?.email || '', phone: '',

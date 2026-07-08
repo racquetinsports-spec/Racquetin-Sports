@@ -223,6 +223,17 @@ ul  { list-style: none; }
   cursor: pointer;
   outline: none;
 }
+
+/* Any form field under 16px triggers iOS Safari's automatic zoom-in on
+   focus -- this is why checkout previously looked "zoomed" on iPhones:
+   tapping a field silently zoomed the whole page in. 16px here is a
+   mobile-only floor for form controls, not a typography change --
+   desktop's clamp() values above are completely untouched. */
+@media (max-width: 640px) {
+  .input, .select, textarea.input {
+    font-size: 16px;
+  }
+}
 .select:focus { border-color: var(--bk); }
 
 /* ── Utility ─────────────────────────────────────────────── */

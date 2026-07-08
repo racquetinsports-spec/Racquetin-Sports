@@ -336,13 +336,11 @@ function HeroCanvas({ heroText, heroCta }) {
 
       camera.position.set(S.cx, S.cy, S.cz);
       // On a narrow/tall viewport (phones), the horizontal frustum of a
-      // perspective camera is squeezed by the low aspect ratio, which
-      // crops the racket's silhouette at the edges even though the
-      // vertical framing looks fine — this is why the hero previously
-      // felt oversized/cropped on mobile. Compensating with extra FOV
-      // only when aspect is narrow fixes that without touching any
-      // keyframe, timing, or desktop camera value: aspect >= 0.9 (any
-      // landscape/tablet/desktop view) gets zero adjustment.
+      // perspective camera is squeezed by the low aspect ratio, cropping
+      // the racket's silhouette at the edges even though vertical framing
+      // looks fine. Compensating with extra FOV only when aspect is
+      // narrow fixes that without touching any keyframe, timing, or
+      // desktop camera value — aspect >= 0.9 gets zero adjustment.
       const heroAspect = window.innerWidth / window.innerHeight;
       const mobileFovBoost = heroAspect < 0.9 ? clamp((0.9 - heroAspect) / 0.5, 0, 1) * 12 : 0;
       camera.fov = S.fov + mobileFovBoost;
@@ -695,6 +693,18 @@ function HeroCanvas({ heroText, heroCta }) {
           text-align: center;
           width: min(520px, 78vw);
         }
+        @media (max-width: 640px) {
+          /* The final centered scene ("Your Game. Engineered.") stacks
+             eyebrow + two headline lines + body + CTA buttons, vertically
+             centered — on a short mobile viewport that full stack can
+             exceed the visible height and get clipped by .hero-root's
+             overflow:hidden. Tightening vertical spacing (never font
+             size — typography is untouched) keeps the whole block
+             comfortably inside the viewport on small phones. */
+          .hero-sp-cc { width: min(300px, 82vw); }
+          .hero-sp-cc .hero-body { margin-top: 6px; }
+          .hero-sp-cc .hero-ctas { margin-top: 16px; gap: 8px; }
+        }
 
         /* ── Text styles ───────────────────────────────────── */
         .hero-ey {
@@ -822,23 +832,6 @@ function HeroCanvas({ heroText, heroCta }) {
             max-width: 80vw;
           }
           .hero-sp-bc { bottom: clamp(80px, 12%, 130px); right: 20px; width: min(320px, 70vw); }
-
-          /* Guaranteed legibility on small screens regardless of what's
-             behind the text (racket, court lines) — a soft frosted
-             backdrop rather than relying purely on the vignette, since
-             mobile framing has much less predictable empty space around
-             the racket than desktop's wide aspect ratio does. Text
-             size/weight/color are untouched — only a backdrop is added. */
-          .hero-sp {
-            background: rgba(255,255,255,.72);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            padding: 14px 18px;
-            border-radius: 14px;
-          }
-        }
-        @media (max-width: 380px) {
-          .hero-sp-bc { right: 14px; width: min(260px, 74vw); bottom: clamp(70px, 11%, 110px); }
         }
       `}</style>
     </div>
@@ -956,8 +949,21 @@ function CollectionsGrid() {
         .cc-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
         .cc-name { font-size: clamp(16px, 1.3vw, 19px); font-weight: 700; letter-spacing: -.02em; color: var(--bk); }
         .cc-count { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--gr-2); white-space: nowrap; flex-shrink: 0; }
-        .cc-desc { font-size: 13px; color: var(--gr-1); line-height: 1.5; margin-bottom: 16px; flex: 1; }
-        .cc-cta { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; letter-spacing: .01em; color: var(--cr); }
+        .cc-desc {
+          font-size: 13px; color: var(--gr-1); line-height: 1.5; margin-bottom: 16px;
+          /* Fixed to exactly 2 lines regardless of actual text length —
+             descriptions of varying length were giving each category
+             card a different natural height, which threw off the grid
+             row heights and made the images (and cards) beside each
+             other look misaligned. Every card's body is now the same
+             height no matter how short or long its description is. */
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          min-height: calc(13px * 1.5 * 2);
+        }
+        .cc-cta { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; letter-spacing: .01em; color: var(--cr); margin-top: auto; }
         .cc-cta svg { transition: transform .3s cubic-bezier(.16,1,.3,1); }
         .cc-card:hover .cc-cta svg { transform: translateX(3px); }
         @media(max-width:540px){ .cc-grid { grid-template-columns: 1fr 1fr; gap: 16px; } .cc-body { padding: 16px 16px 18px; } }

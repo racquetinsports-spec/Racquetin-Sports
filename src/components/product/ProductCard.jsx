@@ -29,7 +29,7 @@ const ProductCard = memo(function ProductCard({ product, index = 0 }) {
       className="pcard"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: .5, delay: Math.min(index, 8) * .06, ease: [.16,1,.3,1] }}
+      transition={{ duration: .5, delay: index * .06, ease: [.16,1,.3,1] }}
     >
       {/* Image */}
       <Link to={`/product/${product.id}`} className="pcard-img-wrap">

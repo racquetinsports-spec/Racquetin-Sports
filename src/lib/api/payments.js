@@ -11,7 +11,7 @@ import { supabase } from '../supabase';
 const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID;
 
 // Load the Razorpay checkout script dynamically (not at bundle time)
-function loadRazorpayScript() {
+export function loadRazorpayScript() {
   return new Promise((resolve) => {
     if (window.Razorpay) return resolve(true);
     const script = document.createElement('script');
