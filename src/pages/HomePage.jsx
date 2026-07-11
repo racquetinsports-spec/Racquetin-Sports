@@ -910,10 +910,16 @@ function HeroCanvas({ heroText, heroCta }) {
         /* ── Featured Product badge ───────────────────────────── */
         .hero-feature-badge {
           position: absolute;
-          top: clamp(100px, 16vh, 150px);
-          left: clamp(24px, 6vw, 100px);
+          /* Bottom-right, same corner as the scene-0 heading below it
+             (.hero-sp-bc) — stacked well clear above it (that block
+             tops out around 90-150px + its own ~120px of text, so
+             270px+ keeps a comfortable gap at every viewport height)
+             rather than overlapping it. */
+          bottom: clamp(270px, 34vh, 360px);
+          right: clamp(24px, 6vw, 100px);
           z-index: 12;
           max-width: min(320px, 70vw);
+          text-align: right;
           pointer-events: none;
         }
         .hero-feature-eyebrow {
@@ -932,8 +938,12 @@ function HeroCanvas({ heroText, heroCta }) {
         .hero-feature-cta {
           font-size: 12px; color: var(--gr-1); margin-top: 12px; font-style: italic;
         }
-        @media (max-width: 860px) {
-          .hero-feature-badge { top: clamp(84px, 14vh, 110px); left: 20px; max-width: 62vw; }
+        @media (max-width: 640px) {
+          /* Below 640px .hero-sp-bc is hidden entirely (see that media
+             query further down), so the corner is free and the badge
+             can sit at the same comfortable distance from the bottom
+             that heading used to use — no stacking math needed here. */
+          .hero-feature-badge { bottom: clamp(80px, 12%, 130px); right: 20px; max-width: 62vw; }
           .hero-feature-name { font-size: 16px; }
         }
 
