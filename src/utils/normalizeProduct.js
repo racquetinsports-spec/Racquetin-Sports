@@ -6,20 +6,36 @@
 // identical to the rest of the app so no UI code has to care which
 // source the data came from.
 //
-// Known gap (see racketin-launch-audit.md / migration notes): the
-// `products` table has no columns for `gripSizes` or `sizes` (used by
-// racket grip and shoe/apparel size selectors on the Product Detail
-// page). Those variant options exist only in local data/products.js
-// today. Supabase-sourced products will simply omit that selector —
-// ProductDetailPage already guards both with `{product.gripSizes && ...}`
-// / `{product.sizes && ...}`, so this doesn't crash, it just means
-// that specific UI won't appear until the schema grows those columns.
+// Variants (e.g. shoe sizes) come from the real product_variants
+// table — see supabase/migration_variant_inventory.sql. Each has its
+// own tracked stock; ProductDetailPage uses this array to render a
+// real size selector instead of the old gripSizes/sizes fields, which
+// never existed as real columns and only worked for local demo data.
 
 function isLocalShape(p) {
   // Every Supabase `products` row always has a `slug` column, even
   // without the images/categories join. Local data/products.js
   // objects never have one — that's the reliable tell.
   return p && p.slug === undefined;
+}
+
+function normalizeVariants(rawVariants) {
+  return (rawVariants || [])
+    .map(v => ({
+      id: v.id,
+      name: v.name,     // e.g. 'Size'
+      value: v.value,   // e.g. 'UK8'
+      stock: v.stock ?? 0,
+      isActive: v.is_active !== false,
+      priceAdj: v.price_adj || 0,
+    }))
+    // Sort numerically where possible (UK7, UK7.5, UK8, UK11 — not UK11 before UK8)
+    .sort((a, b) => {
+      const na = parseFloat(a.value.replace(/[^0-9.]/g, ''));
+      const nb = parseFloat(b.value.replace(/[^0-9.]/g, ''));
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return a.value.localeCompare(b.value);
+    });
 }
 
 export function normalizeProduct(p) {
@@ -66,9 +82,9 @@ export function normalizeProduct(p) {
     rating: p.rating ?? 0,
     reviews: p.review_count ?? 0,
     images,
-    // Not present in the current schema — see note above.
-    gripSizes: undefined,
-    sizes: undefined,
+    // Real, stock-tracked variants (e.g. shoe sizes) — empty array for
+    // products with none (most racquets, which use colors[] above instead).
+    variants: normalizeVariants(p.product_variants),
   };
 }
 

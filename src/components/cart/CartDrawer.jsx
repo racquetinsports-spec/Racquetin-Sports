@@ -71,6 +71,7 @@ export default function CartDrawer() {
                     <div className="cart-item-variant t-small">
                       {item.product.series}
                       {item.variant.color && ` · ${item.variant.color}`}
+                      {item.variantInfo && ` · ${item.variantInfo.name}: ${item.variantInfo.value}`}
                     </div>
                     <div className="cart-item-price t-price" style={{ fontSize: 14 }}>{formatPrice(item.product.price)}</div>
                   </div>

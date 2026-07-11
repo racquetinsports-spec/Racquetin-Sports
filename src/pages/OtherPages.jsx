@@ -63,7 +63,12 @@ export function CartPage() {
                   <div className="t-small">{item.product.series}</div>
                   {item.variant.color && <div className="t-small">Color: {item.variant.color}</div>}
                   {item.variant.grip && <div className="t-small">Grip: {item.variant.grip}</div>}
-                  {item.variant.size && <div className="t-small">Size: {item.variant.size}</div>}
+                  {item.variantInfo && <div className="t-small">{item.variantInfo.name}: {item.variantInfo.value}</div>}
+                  {item.variantInfo && item.variantInfo.stock <= 3 && (
+                    <div className="t-small" style={{ color: '#d97706', fontWeight: 600 }}>
+                      {item.variantInfo.stock <= 0 ? 'No longer in stock' : `Only ${item.variantInfo.stock} left`}
+                    </div>
+                  )}
                   <div style={{ marginTop: 8 }}>
                     <div className="cart-qty">
                       <button onClick={() => updateQty(item.id, item.qty - 1)}>−</button>
@@ -219,7 +224,7 @@ export function CheckoutPage() {
     // Step 1 — server re-prices every item from the database (never
     // trusting this browser's numbers) and creates a real Razorpay order.
     const { data: rpOrder, error: createError } = await createRazorpayOrder({
-      items: items.map(i => ({ productId: i.product.id, qty: i.qty, variant: i.variant })),
+      items: items.map(i => ({ productId: i.product.id, qty: i.qty, variant: i.variant, variantId: i.variantId })),
       shippingAddress: { ...form, delivery },
     });
     if (createError) { setError(createError.message || 'Could not start checkout.'); setSubmitting(false); return; }

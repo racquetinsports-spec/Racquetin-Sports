@@ -143,8 +143,10 @@ CREATE TABLE IF NOT EXISTS product_variants (
   price_adj  INT   DEFAULT 0,  -- price adjustment in paise
   stock      INT   DEFAULT 0,
   is_active  BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (product_id, name, value)
 );
+CREATE INDEX idx_product_variants_product ON product_variants(product_id);
 CREATE INDEX idx_variants_product ON product_variants(product_id);
 
 -- ─────────────────────────────────────────────────────────────────
@@ -257,9 +259,11 @@ CREATE TABLE IF NOT EXISTS order_items (
   price        INT   NOT NULL,  -- snapshot in paise
   qty          INT   NOT NULL,
   variant      JSONB DEFAULT '{}',
+  variant_id   UUID  REFERENCES product_variants(id) ON DELETE SET NULL, -- exact sized variant purchased, if any
   image_url    TEXT,
   created_at   TIMESTAMPTZ DEFAULT now()
 );
+CREATE INDEX idx_order_items_variant ON order_items(variant_id);
 CREATE INDEX idx_order_items_order ON order_items(order_id);
 
 -- ─────────────────────────────────────────────────────────────────
@@ -394,11 +398,13 @@ CREATE TABLE IF NOT EXISTS cart_items (
   user_id    UUID  NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   product_id UUID  NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   qty        INT   NOT NULL DEFAULT 1,
-  variant    JSONB DEFAULT '{}',
+  variant    JSONB DEFAULT '{}', -- free-form tag (grip/color) for products with no per-option stock
+  variant_id UUID  REFERENCES product_variants(id) ON DELETE SET NULL, -- real variant (e.g. shoe size) with its own tracked stock
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(user_id, product_id, variant)
+  UNIQUE(user_id, product_id, variant, variant_id)
 );
+CREATE INDEX idx_cart_items_variant ON cart_items(variant_id);
 CREATE INDEX idx_cart_user ON cart_items(user_id);
 CREATE TRIGGER cart_updated BEFORE UPDATE ON cart_items FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
@@ -535,6 +541,19 @@ BEGIN
   UPDATE products
   SET stock = GREATEST(0, stock - qty), updated_at = now()
   WHERE id = product_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Variant-aware version — deducts from a specific product_variants row
+-- (e.g. one shoe size) instead of the parent product's own stock.
+-- Used whenever an order line has a variant_id; decrement_stock above
+-- still handles every line that doesn't (e.g. racquets).
+CREATE OR REPLACE FUNCTION decrement_variant_stock(variant_id UUID, qty INT)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE product_variants
+  SET stock = GREATEST(0, stock - qty)
+  WHERE id = variant_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

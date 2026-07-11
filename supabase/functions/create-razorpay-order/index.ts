@@ -84,7 +84,40 @@ Deno.serve(async (req) => {
       if (!product.is_active) {
         return jsonResponse({ error: `"${product.name}" is no longer available` }, 400);
       }
-      if (product.stock < qty) {
+
+      // Variant-aware stock check (e.g. a specific shoe size) — takes
+      // over from the parent product's own stock entirely when a
+      // variantId is given, since that's the real, tracked figure for
+      // that option. The variantId is never trusted blindly: it must
+      // actually belong to this product, or a client could otherwise
+      // claim a cheap/in-stock variant from a different product.
+      let variantId: string | null = null;
+      let variantPriceAdj = 0;
+      let variantSnapshot: Record<string, string> = {};
+
+      if (raw.variantId) {
+        const { data: variant, error: variantError } = await admin
+          .from('product_variants')
+          .select('id, product_id, name, value, stock, is_active, price_adj')
+          .eq('id', raw.variantId)
+          .maybeSingle();
+
+        if (variantError || !variant) {
+          return jsonResponse({ error: `Selected option not found for "${product.name}"` }, 400);
+        }
+        if (variant.product_id !== product.id) {
+          return jsonResponse({ error: `Selected option does not belong to "${product.name}"` }, 400);
+        }
+        if (!variant.is_active) {
+          return jsonResponse({ error: `"${product.name}" (${variant.value}) is no longer available` }, 400);
+        }
+        if (variant.stock < qty) {
+          return jsonResponse({ error: `Only ${variant.stock} of "${product.name}" (${variant.value}) left in stock` }, 400);
+        }
+        variantId = variant.id;
+        variantPriceAdj = variant.price_adj || 0;
+        variantSnapshot = { [variant.name]: variant.value };
+      } else if (product.stock < qty) {
         return jsonResponse({ error: `Only ${product.stock} of "${product.name}" left in stock` }, 400);
       }
 
@@ -95,9 +128,10 @@ Deno.serve(async (req) => {
         product_id: product.id,
         slug: product.slug,
         name: product.name,
-        price: product.price,       // server price, not the client's
+        price: product.price + variantPriceAdj, // server price (+ variant adjustment, e.g. a size-specific upcharge), never the client's
         qty,
-        variant: raw.variant || {},
+        variant: Object.keys(variantSnapshot).length ? variantSnapshot : (raw.variant || {}),
+        variant_id: variantId,
         image_url: primaryImage,
       });
     }

@@ -21,6 +21,7 @@ export default function ProductDetailPage() {
 
   const [selectedColor, setSelectedColor] = useState(0);
   const [selectedGrip, setSelectedGrip] = useState(0);
+  const [selectedVariantId, setSelectedVariantId] = useState(null);
   const [qty, setQty] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
   const [activeTab, setActiveTab] = useState('specs');
@@ -36,6 +37,7 @@ export default function ProductDetailPage() {
     setRelated([]);
     setSelectedColor(0);
     setSelectedGrip(0);
+    setSelectedVariantId(null);
     setQty(1);
     setActiveImage(0);
     setActiveTab('specs');
@@ -59,6 +61,8 @@ export default function ProductDetailPage() {
         }
         const normalized = normalizeProduct(data);
         setProduct(normalized);
+        const firstAvailable = normalized.variants?.find(v => v.isActive && v.stock > 0);
+        if (firstAvailable) setSelectedVariantId(firstAvailable.id);
         const { data: relatedData } = await fetchRelated(normalized.dbId ?? normalized.id, normalized.category);
         if (!cancelled) setRelated(normalizeProducts(relatedData).filter(p => p.id !== normalized.id).slice(0, 4));
         if (!cancelled) setLoading(false);
@@ -84,13 +88,18 @@ export default function ProductDetailPage() {
   );
 
   const wished = has(product.id);
+  const hasVariants = product.variants && product.variants.length > 0;
+  const selectedVariant = hasVariants ? product.variants.find(v => v.id === selectedVariantId) : null;
+  const canAddToCart = !hasVariants || (selectedVariant && selectedVariant.isActive && selectedVariant.stock > 0);
 
   const handleAddToCart = () => {
-    addItem(product, {
-      color: product.colors?.[selectedColor],
-      grip: product.gripSizes?.[selectedGrip],
-      size: product.sizes?.[selectedGrip],
-    }, qty);
+    if (!canAddToCart) return;
+    addItem(
+      product,
+      { color: product.colors?.[selectedColor], grip: product.gripSizes?.[selectedGrip] },
+      qty,
+      selectedVariant ? selectedVariant.id : null,
+    );
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   };
@@ -236,6 +245,37 @@ export default function ProductDetailPage() {
             </div>
           )}
 
+          {/* Size — real, stock-tracked variants (e.g. shoe sizes) */}
+          {hasVariants && (
+            <div className="pdp-option-group">
+              <div className="pdp-option-label">
+                {product.variants[0].name}: <strong>{selectedVariant ? selectedVariant.value : 'Select a size'}</strong>
+                {selectedVariant && selectedVariant.stock > 0 && selectedVariant.stock <= 3 && (
+                  <span className="pdp-stock-low"> — only {selectedVariant.stock} left</span>
+                )}
+              </div>
+              <div className="pdp-size-row">
+                {product.variants.map(v => {
+                  const outOfStock = !v.isActive || v.stock <= 0;
+                  return (
+                    <button
+                      key={v.id}
+                      className={`pdp-size-btn ${selectedVariantId === v.id ? 'pdp-size-active' : ''} ${outOfStock ? 'pdp-size-disabled' : ''}`}
+                      onClick={() => !outOfStock && setSelectedVariantId(v.id)}
+                      disabled={outOfStock}
+                      title={outOfStock ? 'Out of stock' : undefined}
+                    >
+                      {v.value}
+                    </button>
+                  );
+                })}
+              </div>
+              {!selectedVariant && (
+                <p className="pdp-stock-low" style={{ marginTop: 8 }}>Please select a size before adding to cart.</p>
+              )}
+            </div>
+          )}
+
           {/* Size — shoes (numeric) and apparel (S/M/L) */}
           {product.sizes && (
             <div className="pdp-option-group">
@@ -272,9 +312,10 @@ export default function ProductDetailPage() {
             <motion.button
               className={`btn btn-full ${added ? 'btn-red' : 'btn-primary'} btn-lg pdp-atc`}
               onClick={handleAddToCart}
-              whileTap={{ scale: 0.98 }}
+              disabled={!canAddToCart}
+              whileTap={canAddToCart ? { scale: 0.98 } : undefined}
             >
-              {added ? 'Added to Cart' : 'Add to Cart'}
+              {added ? 'Added to Cart' : hasVariants && !selectedVariant ? 'Select a Size' : 'Add to Cart'}
             </motion.button>
             <button
               className={`btn-icon pdp-wish ${wished ? 'pdp-wish-active' : ''}`}
@@ -502,6 +543,9 @@ export default function ProductDetailPage() {
         .pdp-color-btn:hover, .pdp-color-active { border-color:var(--bk); background:var(--bk); color:var(--wh); }
         .pdp-size-btn { width:48px; height:40px; border:1.5px solid var(--gr-4); border-radius:var(--r-sm); font-size:13px; font-weight:500; transition:var(--trans); }
         .pdp-size-btn:hover, .pdp-size-active { border-color:var(--bk); background:var(--bk); color:var(--wh); }
+        .pdp-size-disabled { opacity:.35; text-decoration:line-through; cursor:not-allowed; }
+        .pdp-size-disabled:hover { border-color:var(--gr-4); background:none; color:inherit; }
+        .pdp-stock-low { color:#d97706; font-size:12px; font-weight:600; }
         .pdp-qty { display:inline-flex; align-items:center; border:1.5px solid var(--gr-4); border-radius:var(--r-sm); overflow:hidden; }
         .pdp-qty button { width:36px; height:36px; font-size:18px; transition:background .15s; }
         .pdp-qty button:hover { background:var(--gr-6); }

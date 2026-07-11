@@ -23,6 +23,9 @@ import { listMedia, uploadMedia, replaceMedia, deleteMedia } from '../../lib/api
 import {
   fetchShipmentByOrderId, createShipment, updateShipment, markShipmentStatus, cancelShipment, logShipmentEvent,
 } from '../../lib/api/shipments';
+import {
+  fetchVariantsForProduct, createVariant, updateVariant, deleteVariant,
+} from '../../lib/api/variants';
 
 // ── Shared small pieces ─────────────────────────────────────────────
 
@@ -475,12 +478,99 @@ export function AdminProductsPage() {
             </div>
           </div>
 
+          {editing.id && <AdminVariantsPanel productId={editing.id} />}
+
           {formError && <p className="admin-form-error">{formError}</p>}
           <div className="admin-modal-actions">
             <button className="btn btn-outline btn-sm" onClick={() => setEditing(null)}>Cancel</button>
             <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save Product'}</button>
           </div>
         </Modal>
+      )}
+    </div>
+  );
+}
+
+function emptyVariantForm() { return { name: 'Size', value: '', stock: 0, isActive: true }; }
+
+function AdminVariantsPanel({ productId }) {
+  const [variants, setVariants] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(emptyVariantForm());
+  const [adding, setAdding] = useState(false);
+  const [savingId, setSavingId] = useState(null);
+
+  const load = useCallback(() => {
+    fetchVariantsForProduct(productId).then(({ data }) => { setVariants(data); setLoading(false); });
+  }, [productId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleAdd() {
+    if (!form.value.trim()) return;
+    setAdding(true);
+    const { error } = await createVariant(productId, {
+      name: form.name.trim() || 'Size',
+      value: form.value.trim(),
+      stock: Number(form.stock) || 0,
+      isActive: form.isActive,
+    });
+    setAdding(false);
+    if (!error) { setForm(emptyVariantForm()); load(); }
+  }
+
+  async function handleStockChange(variant, stock) {
+    setSavingId(variant.id);
+    setVariants(list => list.map(v => v.id === variant.id ? { ...v, stock } : v));
+    await updateVariant(variant.id, { stock });
+    setSavingId(null);
+  }
+
+  async function handleToggleActive(variant) {
+    setVariants(list => list.map(v => v.id === variant.id ? { ...v, is_active: !v.is_active } : v));
+    await updateVariant(variant.id, { is_active: !variant.is_active });
+  }
+
+  async function handleDelete(variant) {
+    if (!window.confirm(`Remove "${variant.value}"? This cannot be undone.`)) return;
+    setVariants(list => list.filter(v => v.id !== variant.id));
+    await deleteVariant(variant.id);
+  }
+
+  return (
+    <div className="admin-variants-panel">
+      <div className="admin-card-title" style={{ fontSize: 14, marginBottom: 12 }}>Variants (e.g. Sizes)</div>
+      {loading ? (
+        <p className="admin-muted t-small">Loading variants…</p>
+      ) : (
+        <>
+          {variants.length > 0 && (
+            <div className="admin-variants-list">
+              {variants.map(v => (
+                <div key={v.id} className="admin-variant-row">
+                  <span className="admin-variant-label">{v.name}: <strong>{v.value}</strong></span>
+                  <input
+                    className="input admin-variant-stock-input"
+                    type="number"
+                    min={0}
+                    value={v.stock}
+                    disabled={savingId === v.id}
+                    onChange={e => handleStockChange(v, Math.max(0, Number(e.target.value)))}
+                  />
+                  <span className="admin-muted t-small">in stock</span>
+                  <Toggle checked={v.is_active} onChange={() => handleToggleActive(v)} label="Active" />
+                  <button className="admin-variant-remove" onClick={() => handleDelete(v)} aria-label="Remove variant">×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="admin-variant-add-row">
+            <input className="input" placeholder="Name (e.g. Size)" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={{ maxWidth: 120 }} />
+            <input className="input" placeholder="Value (e.g. UK8)" value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} style={{ maxWidth: 120 }} />
+            <input className="input" type="number" min={0} placeholder="Stock" value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))} style={{ maxWidth: 90 }} />
+            <button className="btn btn-outline btn-sm" onClick={handleAdd} disabled={adding}>{adding ? 'Adding…' : '+ Add Variant'}</button>
+          </div>
+        </>
       )}
     </div>
   );
@@ -2043,6 +2133,14 @@ export function AdminPagesStyles() {
       .admin-field-wide { grid-column:1 / -1; }
       .admin-field input, .admin-field select, .admin-field textarea { font-size:13px; }
       .admin-form-error { color:#dc2626; font-size:12px; margin-top:12px; }
+      .admin-variants-panel { margin-top:24px; padding-top:20px; border-top:1px solid var(--gr-5); }
+      .admin-variants-list { display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+      .admin-variant-row { display:flex; align-items:center; gap:12px; padding:8px 12px; background:var(--gr-6); border-radius:var(--r-sm); }
+      .admin-variant-label { font-size:13px; flex:1; }
+      .admin-variant-stock-input { width:70px; padding:6px 8px; font-size:13px; }
+      .admin-variant-remove { width:24px; height:24px; border-radius:50%; color:var(--gr-2); font-size:16px; line-height:1; flex-shrink:0; }
+      .admin-variant-remove:hover { background:#fef2f2; color:#dc2626; }
+      .admin-variant-add-row { display:flex; gap:8px; align-items:center; }
       .admin-color-input { display:flex; gap:8px; align-items:center; }
       .admin-color-input input[type="color"] { width:36px; height:36px; padding:0; border:1px solid var(--gr-4); border-radius:var(--r-sm); cursor:pointer; flex-shrink:0; }
       .admin-color-input .input { flex:1; }

@@ -123,7 +123,7 @@ export async function fetchProductById(id) {
     return { data: p || null, error: p ? null : { message: 'Product not found' } };
   }
 
-  const selectClause = `*, product_images(url, alt_text, is_primary, sort_order), categories(name, slug)`;
+  const selectClause = `*, product_images(url, alt_text, is_primary, sort_order), categories(name, slug), product_variants(id, name, value, stock, is_active, price_adj, sku_suffix)`;
 
   // Primary lookup — every link in the app (ProductCard, search, wishlist,
   // homepage sections) navigates using the product's slug, never its raw

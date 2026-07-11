@@ -68,7 +68,7 @@ export async function fulfillOrderFromIntent({
   if (orderError) return { order: null, alreadyFulfilled: false, error: orderError.message };
 
   // 2. Order items, from the same snapshot.
-  const items = intent.items as Array<{ product_id: string | null; name: string; price: number; qty: number; variant?: object; image_url?: string | null }>;
+  const items = intent.items as Array<{ product_id: string | null; name: string; price: number; qty: number; variant?: object; variant_id?: string | null; image_url?: string | null }>;
   const orderItems = items.map(i => ({
     order_id: order.id,
     product_id: i.product_id,
@@ -76,14 +76,21 @@ export async function fulfillOrderFromIntent({
     price: i.price,
     qty: i.qty,
     variant: i.variant || {},
+    variant_id: i.variant_id || null,
     image_url: i.image_url || null,
   }));
   const { error: itemsError } = await admin.from('order_items').insert(orderItems);
   if (itemsError) return { order, alreadyFulfilled: false, error: itemsError.message };
 
   // 3. Inventory — decremented only now, never before verified payment.
+  // A line with a variant_id (e.g. a specific shoe size) deducts from
+  // that variant's own tracked stock, not the parent product's — the
+  // whole reason product_variants exists rather than a single stock
+  // number per product.
   for (const item of items) {
-    if (item.product_id) {
+    if (item.variant_id) {
+      await admin.rpc('decrement_variant_stock', { variant_id: item.variant_id, qty: item.qty });
+    } else if (item.product_id) {
       await admin.rpc('decrement_stock', { product_id: item.product_id, qty: item.qty });
     }
   }

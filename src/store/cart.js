@@ -24,6 +24,8 @@ function normalizeDbRow(row) {
     id: row.id,
     qty: row.qty,
     variant: row.variant || {},
+    variantId: row.variant_id || null,
+    variantInfo: row.product_variants ? { name: row.product_variants.name, value: row.product_variants.value, stock: row.product_variants.stock, isActive: row.product_variants.is_active } : null,
     product: p.id ? { id: p.id, name: p.name, price: p.price, series: p.series, brand: p.brand, images } : null,
   };
 }
@@ -53,7 +55,7 @@ export const useCartStore = create((set, get) => ({
       const { data: products } = await fetchProductsByIds(rows.map(r => r.productId));
       const byId = new Map(normalizeProducts(products).map(p => [p.id, p]));
       const items = rows
-        .map(row => ({ id: row.key, qty: row.qty, variant: row.variant || {}, product: byId.get(row.productId) || null }))
+        .map(row => ({ id: row.key, qty: row.qty, variant: row.variant || {}, variantId: row.variantId || null, variantInfo: null, product: byId.get(row.productId) || null }))
         .filter(i => i.product);
 
       set({ items, source: source || 'local', loading: false, initialized: true });
@@ -63,9 +65,9 @@ export const useCartStore = create((set, get) => ({
     }
   },
 
-  addItem: async (product, variant = {}, qty = 1) => {
+  addItem: async (product, variant = {}, qty = 1, variantId = null) => {
     useUIStore.getState().openCart();
-    const { error } = await addToCart(product.id, qty, variant);
+    const { error } = await addToCart(product.id, qty, variant, variantId);
     await get().refresh();
     return { error };
   },

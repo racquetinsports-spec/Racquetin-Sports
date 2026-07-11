@@ -22,28 +22,45 @@ export async function fetchCart() {
   const { data, error } = await supabase
     .from('cart_items')
     .select(`
-      id, qty, variant,
+      id, qty, variant, variant_id,
       products:product_id(id, name, price, slug, brand, series,
-        product_images(url, is_primary))
+        product_images(url, is_primary)),
+      product_variants:variant_id(id, name, value, stock, is_active)
     `)
     .eq('user_id', user.id);
   return { data: data || [], error, source: 'db' };
 }
 
-export async function addToCart(productId, qty = 1, variant = {}) {
+export async function addToCart(productId, qty = 1, variant = {}, variantId = null) {
   const { user } = await getUser();
   if (!user || !isSupabaseConfigured()) {
     const cart = getGuestCart();
-    const key = `${productId}-${JSON.stringify(variant)}`;
+    const key = `${productId}-${variantId || JSON.stringify(variant)}`;
     const existing = cart.find(i => i.key === key);
     if (existing) existing.qty += qty;
-    else cart.push({ key, productId, qty, variant });
+    else cart.push({ key, productId, qty, variant, variantId });
     saveGuestCart(cart);
     return { data: cart, error: null };
   }
   const resolvedId = await resolveProductId(productId);
   if (!resolvedId) {
     return { data: null, error: { message: 'This product isn\'t available online yet. Try again shortly.' } };
+  }
+
+  // Client-side stock guard — a UX convenience, not the security
+  // boundary. The real, authoritative check happens server-side in
+  // create-razorpay-order, which never trusts anything the client
+  // sends; this just avoids letting someone add a sold-out size and
+  // only discover that at checkout.
+  if (variantId) {
+    const { data: variantRow } = await supabase
+      .from('product_variants')
+      .select('stock, is_active')
+      .eq('id', variantId)
+      .maybeSingle();
+    if (!variantRow || !variantRow.is_active || variantRow.stock <= 0) {
+      return { data: null, error: { message: 'This size is currently out of stock.' } };
+    }
   }
 
   // Compare variants client-side rather than filtering on the JSONB
@@ -54,12 +71,14 @@ export async function addToCart(productId, qty = 1, variant = {}) {
   // most, so fetching them and comparing here is both correct and cheap.
   const { data: existingItems } = await supabase
     .from('cart_items')
-    .select('id, qty, variant')
+    .select('id, qty, variant, variant_id')
     .eq('user_id', user.id)
     .eq('product_id', resolvedId);
 
   const variantKey = JSON.stringify(variant || {});
-  const existing = (existingItems || []).find(i => JSON.stringify(i.variant || {}) === variantKey);
+  const existing = (existingItems || []).find(i =>
+    variantId ? i.variant_id === variantId : (!i.variant_id && JSON.stringify(i.variant || {}) === variantKey)
+  );
 
   if (existing) {
     const { data, error } = await supabase
@@ -71,7 +90,7 @@ export async function addToCart(productId, qty = 1, variant = {}) {
   }
   const { data, error } = await supabase
     .from('cart_items')
-    .insert([{ user_id: user.id, product_id: resolvedId, qty, variant }])
+    .insert([{ user_id: user.id, product_id: resolvedId, qty, variant, variant_id: variantId }])
     .select().single();
   return { data, error };
 }
@@ -121,7 +140,7 @@ export async function mergeGuestCart() {
   const guestCart = getGuestCart();
   if (!guestCart.length) return;
   for (const item of guestCart) {
-    await addToCart(item.productId, item.qty, item.variant);
+    await addToCart(item.productId, item.qty, item.variant, item.variantId || null);
   }
   clearGuestCart();
 }
