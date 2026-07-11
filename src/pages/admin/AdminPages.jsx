@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatPrice } from '../../utils/format';
 import {
   fetchAllProductsAdmin, createProduct, updateProduct, deleteProduct,
+  fetchImagesForProduct, uploadProductImage, deleteProductImage, setPrimaryImage, reorderProductImage,
 } from '../../lib/api/products';
 import {
   fetchCategories, createCategory, updateCategory, deleteCategory,
@@ -478,6 +479,7 @@ export function AdminProductsPage() {
             </div>
           </div>
 
+          {editing.id && <AdminImagesPanel productId={editing.id} />}
           {editing.id && <AdminVariantsPanel productId={editing.id} />}
 
           {formError && <p className="admin-form-error">{formError}</p>}
@@ -492,6 +494,106 @@ export function AdminProductsPage() {
 }
 
 function emptyVariantForm() { return { name: 'Size', value: '', stock: 0, isActive: true }; }
+
+function AdminImagesPanel({ productId }) {
+  const [images, setImages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const load = useCallback(() => {
+    fetchImagesForProduct(productId).then(({ data }) => { setImages(data); setLoading(false); });
+  }, [productId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleFileSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const { error } = await uploadProductImage(productId, file);
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (!error) load();
+    else window.alert(error.message || 'Upload failed');
+  }
+
+  async function handleSetPrimary(imageId) {
+    setBusyId(imageId);
+    await setPrimaryImage(productId, imageId);
+    await load();
+    setBusyId(null);
+  }
+
+  async function handleDelete(image) {
+    if (!window.confirm('Remove this image?')) return;
+    setBusyId(image.id);
+    await deleteProductImage(image.id, image.storage_path);
+    await load();
+    setBusyId(null);
+  }
+
+  async function handleMove(image, direction) {
+    const idx = images.findIndex(i => i.id === image.id);
+    const swapWith = images[idx + direction];
+    if (!swapWith) return;
+    setBusyId(image.id);
+    await Promise.all([
+      reorderProductImage(image.id, swapWith.sort_order ?? idx + direction),
+      reorderProductImage(swapWith.id, image.sort_order ?? idx),
+    ]);
+    await load();
+    setBusyId(null);
+  }
+
+  return (
+    <div className="admin-images-panel" style={{ marginBottom: 24 }}>
+      <div className="admin-card-title" style={{ fontSize: 14, marginBottom: 12 }}>Images</div>
+      {loading ? (
+        <p className="admin-muted t-small">Loading images…</p>
+      ) : (
+        <>
+          {images.length > 0 && (
+            <div className="admin-images-grid">
+              {images.map((img, i) => (
+                <div key={img.id} className="admin-image-tile">
+                  <img src={img.url} alt="" />
+                  {img.is_primary && <span className="admin-image-primary-badge">Primary</span>}
+                  <div className="admin-image-tile-actions">
+                    {!img.is_primary && (
+                      <button type="button" onClick={() => handleSetPrimary(img.id)} disabled={busyId === img.id} title="Set as primary">★</button>
+                    )}
+                    <button type="button" onClick={() => handleMove(img, -1)} disabled={busyId === img.id || i === 0} title="Move earlier">←</button>
+                    <button type="button" onClick={() => handleMove(img, 1)} disabled={busyId === img.id || i === images.length - 1} title="Move later">→</button>
+                    <button type="button" onClick={() => handleDelete(img)} disabled={busyId === img.id} title="Delete" className="admin-image-tile-delete">×</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ marginTop: 12 }}>
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} disabled={uploading} style={{ display: 'none' }} id={`img-upload-${productId}`} />
+            <label htmlFor={`img-upload-${productId}`} className="btn btn-outline btn-sm" style={{ cursor: uploading ? 'default' : 'pointer', opacity: uploading ? .6 : 1 }}>
+              {uploading ? 'Uploading…' : '+ Upload Image'}
+            </label>
+          </div>
+        </>
+      )}
+      <style>{`
+        .admin-images-grid { display:flex; flex-wrap:wrap; gap:10px; }
+        .admin-image-tile { position:relative; width:88px; height:88px; border-radius:var(--r-sm); overflow:hidden; border:1px solid var(--gr-5); background:var(--gr-6); }
+        .admin-image-tile img { width:100%; height:100%; object-fit:contain; }
+        .admin-image-primary-badge { position:absolute; top:4px; left:4px; background:var(--bk); color:var(--wh); font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px; letter-spacing:.04em; }
+        .admin-image-tile-actions { position:absolute; inset:0; display:flex; align-items:flex-end; justify-content:center; gap:3px; padding:4px; opacity:0; transition:opacity .15s; background:linear-gradient(transparent 40%, rgba(0,0,0,.55)); }
+        .admin-image-tile:hover .admin-image-tile-actions { opacity:1; }
+        .admin-image-tile-actions button { width:22px; height:22px; border-radius:4px; background:rgba(255,255,255,.9); font-size:11px; line-height:1; }
+        .admin-image-tile-actions button:hover { background:var(--wh); }
+        .admin-image-tile-delete { color:#dc2626; font-weight:700; }
+      `}</style>
+    </div>
+  );
+}
 
 function AdminVariantsPanel({ productId }) {
   const [variants, setVariants] = useState([]);

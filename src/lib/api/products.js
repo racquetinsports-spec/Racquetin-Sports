@@ -273,6 +273,27 @@ export async function deleteProduct(id) {
   return { data, error };
 }
 
+export async function fetchImagesForProduct(productId) {
+  const { data, error } = await supabase
+    .from('product_images')
+    .select('*')
+    .eq('product_id', productId)
+    .order('sort_order');
+  return { data: data || [], error };
+}
+
+export async function setPrimaryImage(productId, imageId) {
+  // Only one image should be primary at a time — clear the rest first.
+  await supabase.from('product_images').update({ is_primary: false }).eq('product_id', productId);
+  const { data, error } = await supabase.from('product_images').update({ is_primary: true }).eq('id', imageId).select().single();
+  return { data, error };
+}
+
+export async function reorderProductImage(imageId, sortOrder) {
+  const { data, error } = await supabase.from('product_images').update({ sort_order: sortOrder }).eq('id', imageId).select().single();
+  return { data, error };
+}
+
 export async function uploadProductImage(productId, file) {
   const ext = file.name.split('.').pop();
   const path = `products/${productId}/${Date.now()}.${ext}`;
@@ -285,9 +306,16 @@ export async function uploadProductImage(productId, file) {
     .from('product-images')
     .getPublicUrl(path);
 
+  // The first image for a product becomes primary automatically —
+  // otherwise a product could sit with images but no explicit primary
+  // flag, leaving which one displays as the thumbnail down to sort_order
+  // tie-breaking rather than a clear choice.
+  const { count } = await supabase.from('product_images').select('id', { count: 'exact', head: true }).eq('product_id', productId);
+  const isFirstImage = !count;
+
   const { data, error } = await supabase
     .from('product_images')
-    .insert([{ product_id: productId, url: publicUrl, storage_path: path }])
+    .insert([{ product_id: productId, url: publicUrl, storage_path: path, is_primary: isFirstImage }])
     .select()
     .single();
   return { data, error };
