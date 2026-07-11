@@ -75,6 +75,18 @@ const CATEGORY_META = {
   },
 };
 
+// Filter groups whose options are mutually exclusive (a product only
+// ever has one skill level, so letting three checkboxes be active at
+// once just produced a match-none result). Keyed by category so a
+// future category can opt in without touching the render logic.
+// Multi-select groups (Brand, Size, Color, etc.) are untouched.
+const SINGLE_SELECT_GROUPS = {
+  rackets: ['Skill Level'],
+};
+
+const isSingleSelectGroup = (category, group) =>
+  (SINGLE_SELECT_GROUPS[category] || []).includes(group);
+
 const SORT_OPTIONS = [
   { value: 'featured',   label: 'Featured' },
   { value: 'price-asc',  label: 'Price: Low to High' },
@@ -118,6 +130,7 @@ const BrandTabs = memo(function BrandTabs({ brands, active, onSelect }) {
 
 export default function CollectionPage({ category: categoryProp }) {
   const { category: categoryParam } = useParams();
+  const [searchParams] = useSearchParams();
   const category = categoryProp || categoryParam || 'rackets';
   const meta = CATEGORY_META[category] || CATEGORY_META.rackets;
 
@@ -162,6 +175,11 @@ export default function CollectionPage({ category: categoryProp }) {
 
   const toggleFilter = (group, value) => {
     setActiveFilters(prev => {
+      // Single-select groups (e.g. Skill Level) always replace whatever
+      // was selected — no accumulating multiple mutually-exclusive values.
+      if (isSingleSelectGroup(category, group)) {
+        return { ...prev, [group]: [value] };
+      }
       const current = prev[group] || [];
       const updated = current.includes(value)
         ? current.filter(v => v !== value)
@@ -169,6 +187,44 @@ export default function CollectionPage({ category: categoryProp }) {
       return { ...prev, [group]: updated.length ? updated : undefined };
     });
   };
+
+  // "All" option for single-select groups — clears just that group.
+  const clearGroupFilter = (group) => {
+    setActiveFilters(prev => {
+      const next = { ...prev };
+      delete next[group];
+      return next;
+    });
+  };
+
+  // Preset filters from the URL (?brand=, ?level=) so links from the
+  // nav's "Shop by Brand"/"Shop by Level" dropdowns land with the
+  // right filter already applied, instead of just landing on the
+  // unfiltered category page. Re-runs whenever the category or query
+  // string changes (e.g. clicking a different brand link while
+  // already on this category).
+  useEffect(() => {
+    const brandParam = searchParams.get('brand');
+    const levelParam = searchParams.get('level');
+
+    if (brandParam) {
+      if (category === 'rackets') {
+        setActiveBrand(brandParam);
+      } else {
+        setActiveFilters(prev => ({ ...prev, Brand: [brandParam] }));
+      }
+    }
+
+    if (levelParam && meta.filters['Skill Level']) {
+      const canonical = meta.filters['Skill Level'].find(
+        v => v.toLowerCase() === levelParam.toLowerCase()
+      );
+      if (canonical) {
+        setActiveFilters(prev => ({ ...prev, 'Skill Level': [canonical] }));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category, searchParams]);
 
   const activeCount = Object.values(activeFilters).flat().filter(Boolean).length
     + (activeBrand ? 1 : 0);
@@ -272,25 +328,42 @@ export default function CollectionPage({ category: categoryProp }) {
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
                   </div>
-                {Object.entries(meta.filters).map(([group, values]) => (
-                  <div key={group} className="filter-group">
-                    <div className="filter-group-head">{group}</div>
-                    {values.map(v => {
-                      const active = (activeFilters[group] || []).includes(v);
-                      return (
-                        <label key={v} className={`filter-option ${active ? 'filter-option-active' : ''}`}>
+                {Object.entries(meta.filters).map(([group, values]) => {
+                  const singleSelect = isSingleSelectGroup(category, group);
+                  const groupActive = (activeFilters[group] || []).length > 0;
+                  return (
+                    <div key={group} className="filter-group">
+                      <div className="filter-group-head">{group}</div>
+                      {singleSelect && (
+                        <label className={`filter-option ${!groupActive ? 'filter-option-active' : ''}`}>
                           <input
-                            type="checkbox"
-                            checked={active}
-                            onChange={() => toggleFilter(group, v)}
-                            className="filter-check"
+                            type="radio"
+                            name={`filter-${category}-${group}`}
+                            checked={!groupActive}
+                            onChange={() => clearGroupFilter(group)}
+                            className="filter-check filter-radio"
                           />
-                          <span>{v}</span>
+                          <span>All</span>
                         </label>
-                      );
-                    })}
-                  </div>
-                ))}
+                      )}
+                      {values.map(v => {
+                        const active = (activeFilters[group] || []).includes(v);
+                        return (
+                          <label key={v} className={`filter-option ${active ? 'filter-option-active' : ''}`}>
+                            <input
+                              type={singleSelect ? 'radio' : 'checkbox'}
+                              name={singleSelect ? `filter-${category}-${group}` : undefined}
+                              checked={active}
+                              onChange={() => toggleFilter(group, v)}
+                              className={`filter-check ${singleSelect ? 'filter-radio' : ''}`}
+                            />
+                            <span>{v}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
 
                 {/* Price range */}
                 <div className="filter-group">
@@ -384,6 +457,7 @@ export default function CollectionPage({ category: categoryProp }) {
         .filter-option:hover, .filter-option-active { color:var(--bk); }
         .filter-option-active { font-weight:500; }
         .filter-check { width:14px; height:14px; accent-color:var(--cr); cursor:pointer; flex-shrink:0; }
+        .filter-radio { border-radius:50%; }
         .filter-price-row { display:flex; justify-content:space-between; margin-bottom:8px; }
         .filter-range { width:100%; accent-color:var(--cr); cursor:pointer; }
         @media(max-width:1100px){ .col-grid-narrow{grid-template-columns:repeat(2,1fr);} .col-grid-wide{grid-template-columns:repeat(3,1fr);} }

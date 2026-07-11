@@ -64,6 +64,45 @@ export async function fetchCategoryCounts(slugs) {
   return { data: counts, error: null };
 }
 
+// One lightweight query (brand + category only, no images/joins) used
+// to build the nav's "Shop by Brand" dropdowns and the mobile drawer's
+// expandable category lists — replaces what used to be a hand-written,
+// unmaintained list of test series / fake product names per category.
+// Brands are deduped, sorted, and any category with zero active
+// products carrying a brand is simply omitted from the result so the
+// nav never renders an empty dropdown.
+export async function fetchBrandsByCategory(categorySlugs) {
+  if (!isSupabaseConfigured()) {
+    const map = {};
+    categorySlugs.forEach(slug => {
+      const brands = [...new Set(localGetByCategory(slug).map(p => p.brand).filter(Boolean))].sort();
+      if (brands.length) map[slug] = brands;
+    });
+    return { data: map, error: null };
+  }
+
+  const { data, error } = await supabase
+    .from('products')
+    .select('brand, category_slug')
+    .eq('is_active', true)
+    .in('category_slug', categorySlugs)
+    .not('brand', 'is', null);
+
+  if (error) return { data: {}, error };
+
+  const sets = {};
+  (data || []).forEach(row => {
+    if (!row.brand) return;
+    (sets[row.category_slug] ||= new Set()).add(row.brand.trim());
+  });
+
+  const result = {};
+  Object.entries(sets).forEach(([slug, set]) => {
+    if (set.size) result[slug] = [...set].sort();
+  });
+  return { data: result, error: null };
+}
+
 // ── Reads ─────────────────────────────────────────────────────────
 
 export async function fetchProducts({ category, series, brand, playerLevel, playingStyle, balance, flex, minPrice, maxPrice, sort = 'featured', search, limit = 60, offset = 0 } = {}) {

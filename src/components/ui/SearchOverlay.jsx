@@ -3,21 +3,37 @@ import { formatPrice } from '../../utils/format';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../../store';
-import { fetchProducts } from '../../lib/api/products';
+import { fetchProducts, fetchBrandsByCategory } from '../../lib/api/products';
 import { normalizeProducts } from '../../utils/normalizeProduct';
 
-const SUGGESTIONS = ['R7 Pro', 'Shoes', 'Tournament Feather', 'ProGrip', 'Bags'];
+const ALL_CATEGORY_SLUGS = ['rackets', 'shoes', 'bags', 'shuttlecocks', 'strings', 'grips', 'apparel'];
 
 export default function SearchOverlay() {
   const { searchOpen, closeSearch } = useUIStore();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  // "Popular searches" pills — previously a hardcoded array that included
+  // terms with no matching products (e.g. old test-series names), so
+  // tapping one reliably returned "No results". These are now the real
+  // brands currently in the catalogue, so every pill is guaranteed to
+  // return matches when tapped.
+  const [suggestions, setSuggestions] = useState([]);
   const inputRef = useRef(null);
 
   useEffect(() => {
     if (searchOpen) { setTimeout(() => inputRef.current?.focus(), 100); setQuery(''); }
   }, [searchOpen]);
+
+  useEffect(() => {
+    if (!searchOpen || suggestions.length) return;
+    fetchBrandsByCategory(ALL_CATEGORY_SLUGS)
+      .then(({ data }) => {
+        const brands = [...new Set(Object.values(data || {}).flat())].sort();
+        setSuggestions(brands.slice(0, 6));
+      })
+      .catch(() => setSuggestions([]));
+  }, [searchOpen, suggestions.length]);
 
   useEffect(() => {
     if (query.length <= 1) { setResults([]); setSearching(false); return; }
@@ -74,14 +90,16 @@ export default function SearchOverlay() {
             </div>
 
             {query.length === 0 ? (
-              <div className="search-suggestions">
-                <div className="t-label" style={{ color: 'var(--gr-2)', marginBottom: 12 }}>Popular searches</div>
-                <div className="search-pills">
-                  {SUGGESTIONS.map(s => (
-                    <button key={s} className="search-pill" onClick={() => setQuery(s)}>{s}</button>
-                  ))}
+              suggestions.length > 0 && (
+                <div className="search-suggestions">
+                  <div className="t-label" style={{ color: 'var(--gr-2)', marginBottom: 12 }}>Popular searches</div>
+                  <div className="search-pills">
+                    {suggestions.map(s => (
+                      <button key={s} className="search-pill" onClick={() => setQuery(s)}>{s}</button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )
             ) : searching ? (
               <div className="search-empty">
                 <p className="t-body">Searching…</p>

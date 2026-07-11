@@ -1023,7 +1023,13 @@ function HeroCanvas({ heroText, heroCta }) {
             text-align: center;
             max-width: 80vw;
           }
-          .hero-sp-bc { bottom: clamp(80px, 12%, 130px); right: 20px; width: min(320px, 70vw); }
+          /* Scene 0's own headline ("Engineered / for Speed") said the
+             same thing the Featured Product badge already says — on a
+             small screen the two blocks stacked on top of each other
+             and crowded the racket. The badge is now the single
+             overlay for this scene on mobile; nothing else about the
+             scene (its timing, the camera, or the dots below) changes. */
+          .hero-sp-bc { display: none; }
         }
       `}</style>
     </div>
@@ -1230,11 +1236,18 @@ function NewArrivals() {
 }
 
 function TechStrip() {
+  // Same four technologies the hero's scroll scenes already showcase
+  // (see SCENES above) — copy reused verbatim so this section reads as
+  // a continuation of the hero rather than a separate, generic list.
+  // The old card set (AeroForge Frame, Power Core Shaft, etc.) named
+  // technologies that don't exist on the ASTROX 100ZZ and carried
+  // invented stats (23%, 94%, 98%, 500Hz) — removed rather than kept
+  // as unverifiable claims about a real, named product.
   const techs = [
-    { name: 'AeroForge Frame',   desc: 'Triple-wall carbon reduces drag 23% while increasing torsional rigidity.', icon: '01' },
-    { name: 'Power Core Shaft',  desc: 'Variable-flex graphite channels energy with 94% mechanical efficiency.',   icon: '02' },
-    { name: 'HexGrid Strings',   desc: '22×23 micro-tension pattern creates uniform power across 98% of the bed.', icon: '03' },
-    { name: 'ProGrip System',    desc: 'Anti-slip PU overgrip. 94% vibration absorption at 500Hz.',                icon: '04' },
+    { name: 'Rotational Generator System', desc: 'Balanced power through every transition.',            icon: '01' },
+    { name: 'Namd Graphite Shaft',         desc: 'Faster snapback and explosive power generation.',      icon: '02' },
+    { name: 'Energy Boost Cap Plus',       desc: 'Improved shaft flex and energy transfer.',              icon: '03' },
+    { name: 'Slim Aero Frame',             desc: 'Higher swing speeds with excellent control.',           icon: '04' },
   ];
   return (
     <section className="section" style={{ background: 'var(--bk)', color: '#fff' }}>
