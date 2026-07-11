@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as THREE from 'three';
-import { getByCategory } from '../data/products';
 import { fetchProducts, fetchBestSellers, fetchNewArrivals, fetchCategoryCounts } from '../lib/api/products';
 import { normalizeProducts } from '../utils/normalizeProduct';
 import { recommendRackets, BUDGET_RANGES } from '../utils/racketFinder';
@@ -16,7 +15,7 @@ import ProductCard from '../components/product/ProductCard';
 const SCENES = [
   {
     pos: 'bc',   // bottom-center
-    ey: 'RacquetIn R7 Series',
+    ey: 'New Season Arrival',
     h1: 'Engineered',
     h2: 'for Speed',
     body: 'Experience Precision',
@@ -24,42 +23,42 @@ const SCENES = [
   },
   {
     pos: 'lm',   // left-middle
-    ey: '01 — Balance',
-    h1: 'Round',
-    h2: 'Control Cap',
-    body: 'A circular grip end engineered for stability, balance, and confident hand positioning.',
-    spec: { k: 'End cap diameter', v: '28mm' },
+    ey: '01 — Rotation',
+    h1: 'Rotational Generator',
+    h2: 'System',
+    body: 'Balanced power through every transition.',
+    spec: null,
   },
   {
     pos: 'rl',   // right-lower
-    ey: '02 — Control',
-    h1: 'Red Performance',
-    h2: 'Grip',
-    body: 'Textured for control, comfort, and fast directional changes.',
-    spec: { k: 'Vibration absorption', v: '94%' },
+    ey: '02 — Shaft',
+    h1: 'Namd Graphite',
+    h2: 'Shaft',
+    body: 'Faster snapback and explosive power generation.',
+    spec: null,
   },
   {
     pos: 'rh',   // right-upper (safe zone: top ≥ 120px)
-    ey: '03 — Power',
-    h1: 'Power',
-    h2: 'String Bed',
-    body: 'Built for clean repulsion, precision control, and fast response.',
-    spec: { k: 'String tension', v: '32lbs' },
+    ey: '03 — Flex',
+    h1: 'Energy Boost',
+    h2: 'Cap Plus',
+    body: 'Improved shaft flex and energy transfer.',
+    spec: null,
   },
   {
     pos: 'rm',   // right-middle
-    ey: '04 — Engineering',
-    h1: 'Aerodynamic',
+    ey: '04 — Aerodynamics',
+    h1: 'Slim Aero',
     h2: 'Frame',
-    body: 'Engineered thickness profile for maximum speed and stability.',
-    spec: { k: 'Drag reduction', v: '−23%' },
+    body: 'Higher swing speeds with excellent control.',
+    spec: null,
   },
   {
     pos: 'cc',   // dead center
-    ey: 'RacquetIn R7 Pro',
+    ey: 'Yonex ASTROX 100ZZ',
     h1: 'Your Game.',
     h2: 'Engineered.',
-    body: 'The R7 Series — Available Now',
+    body: 'The ASTROX 100ZZ — Available Now',
     spec: null,
   },
 ];
@@ -101,6 +100,35 @@ function HeroCanvas({ heroText, heroCta }) {
   const [introStep,    setIntroStep]     = useState(0);
   // activeScene: -1 = none visible, 0–5 = scene index
   const [activeScene,  setActiveScene]   = useState(-1);
+  const [showHint, setShowHint] = useState(true);
+  const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+  // Interaction hint: visible once the intro finishes, gone after 6s or
+  // on the visitor's first mouse move / touch / scroll — whichever
+  // happens first. Purely a UI overlay; touches nothing about the
+  // Three.js scene, camera, or animation itself.
+  useEffect(() => {
+    if (introStep < 4) return;
+    const dismiss = () => setShowHint(false);
+    const timer = setTimeout(dismiss, 6000);
+    const opts = { once: true, passive: true };
+    window.addEventListener('mousemove', dismiss, opts);
+    window.addEventListener('touchstart', dismiss, opts);
+    window.addEventListener('wheel', dismiss, opts);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('mousemove', dismiss, opts);
+      window.removeEventListener('touchstart', dismiss, opts);
+      window.removeEventListener('wheel', dismiss, opts);
+    };
+  }, [introStep]);
+
+  function handleSkipToCategories() {
+    document.getElementById('categories')?.scrollIntoView({
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  }
   // scrollP drives scene switching — updated from RAF via ref+rAF callback
   const scrollPRef  = useRef(0);
   const lastSceneRef = useRef(-1);
@@ -505,8 +533,75 @@ function HeroCanvas({ heroText, heroCta }) {
       )}
 
 
+      {/* Featured Product panel — Apple/Dyson/Leica product-launch style,
+          top-left (empty quadrant during scene 0, which uses bottom-right).
+          Only shown during the opening scene — the feature scenes that
+          follow already carry their own text in varying positions, and
+          showing this alongside them risks crowding or overlap. */}
+      <AnimatePresence>
+        {introStep >= 4 && activeScene === 0 && (
+          <motion.div
+            className="hero-feature-badge"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: .6, delay: .3, ease: [.16, 1, .3, 1] }}
+          >
+            <div className="hero-feature-eyebrow">Featured Product</div>
+            <div className="hero-feature-tag">Interactive 3D Showcase</div>
+            <div className="hero-feature-name">Yonex ASTROX 100ZZ</div>
+            <div className="hero-feature-sub">Professional Performance Series</div>
+            <div className="hero-feature-cta">Explore the racket in full 3D.</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Interaction guidance — fades on its own after 6s, or immediately
+          on the visitor's first mouse move / touch / scroll (see the
+          effect above). Reduced-motion visitors still get the hint text,
+          just without the floating icon animation. */}
+      <AnimatePresence>
+        {introStep >= 4 && activeScene === 0 && showHint && (
+          <motion.div
+            className="hero-hint"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: .4 }}
+          >
+            <svg className={`hero-hint-icon-desktop ${prefersReducedMotion ? '' : 'hero-hint-icon-animate'}`} width="20" height="28" viewBox="0 0 20 28" fill="none" aria-hidden="true">
+              <rect x="1" y="1" width="18" height="26" rx="9" stroke="currentColor" strokeWidth="1.4" />
+              <rect className="hero-hint-icon-dot" x="8.5" y="6" width="3" height="7" rx="1.5" fill="currentColor" />
+            </svg>
+            <svg className={`hero-hint-icon-mobile ${prefersReducedMotion ? '' : 'hero-hint-icon-swipe'}`} width="28" height="20" viewBox="0 0 28 20" fill="none" aria-hidden="true">
+              <path d="M2 10h20M22 10l-5-5M22 10l-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <div className="hero-hint-text-desktop">
+              <strong>Interactive 3D Experience</strong>
+              <span>Move your mouse to explore · Drag to rotate · Scroll to continue</span>
+            </div>
+            <div className="hero-hint-text-mobile">Swipe to explore the racket</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Skip to Categories — rendered from mount (not gated on introStep)
+          and given a higher z-index than .hero-intro's loading overlay
+          (z-index:50) specifically so it stays clickable even while the
+          GLB is still loading. Fades out once the visitor scrolls past
+          the opening scene, since the feature scenes' own text already
+          occupies this general area from here on. */}
+      <button
+        type="button"
+        className={`hero-skip-btn ${activeScene > 0 ? 'hero-skip-hidden' : ''}`}
+        onClick={handleSkipToCategories}
+      >
+        Skip to Categories <span aria-hidden="true">↓</span>
+      </button>
+
       {/* Vignette */}
       <div className="hero-vignette" />
+
 
       <style>{`
         /* ── Root ──────────────────────────────────────────── */
@@ -812,6 +907,103 @@ function HeroCanvas({ heroText, heroCta }) {
           transform: scale(1.9);
         }
 
+        /* ── Featured Product badge ───────────────────────────── */
+        .hero-feature-badge {
+          position: absolute;
+          top: clamp(100px, 16vh, 150px);
+          left: clamp(24px, 6vw, 100px);
+          z-index: 12;
+          max-width: min(320px, 70vw);
+          pointer-events: none;
+        }
+        .hero-feature-eyebrow {
+          font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+          color: var(--cr); margin-bottom: 8px;
+        }
+        .hero-feature-tag {
+          font-size: 11px; font-weight: 500; letter-spacing: .04em; color: var(--gr-2); margin-bottom: 4px;
+        }
+        .hero-feature-name {
+          font-size: clamp(18px, 1.8vw, 24px); font-weight: 700; letter-spacing: -.02em; color: var(--bk); line-height: 1.15;
+        }
+        .hero-feature-sub {
+          font-size: 12px; color: var(--gr-2); margin-top: 4px;
+        }
+        .hero-feature-cta {
+          font-size: 12px; color: var(--gr-1); margin-top: 12px; font-style: italic;
+        }
+        @media (max-width: 860px) {
+          .hero-feature-badge { top: clamp(84px, 14vh, 110px); left: 20px; max-width: 62vw; }
+          .hero-feature-name { font-size: 16px; }
+        }
+
+        /* ── Interaction hint ─────────────────────────────────── */
+        .hero-hint {
+          position: absolute;
+          bottom: 92px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 12;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 18px;
+          background: rgba(255,255,255,.78);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          border-radius: 999px;
+          pointer-events: none;
+          white-space: nowrap;
+        }
+        .hero-hint-text-desktop { display: flex; flex-direction: column; gap: 1px; }
+        .hero-hint-text-desktop strong { font-size: 11px; font-weight: 600; color: var(--bk); }
+        .hero-hint-text-desktop span { font-size: 10.5px; color: var(--gr-2); }
+        .hero-hint-text-mobile { display: none; font-size: 11px; font-weight: 600; color: var(--bk); }
+        .hero-hint-icon-mobile { display: none; }
+        .hero-hint-icon-desktop, .hero-hint-icon-mobile { color: var(--gr-1); flex-shrink: 0; }
+        .hero-hint-icon-animate .hero-hint-icon-dot { animation: hero-hint-scroll 1.6s ease-in-out infinite; }
+        @keyframes hero-hint-scroll { 0%,100% { transform: translateY(0); opacity:1; } 50% { transform: translateY(5px); opacity:.4; } }
+        .hero-hint-icon-swipe { animation: hero-hint-swipe 1.6s ease-in-out infinite; }
+        @keyframes hero-hint-swipe { 0%,100% { transform: translateX(0); opacity:1; } 50% { transform: translateX(4px); opacity:.5; } }
+        @media (max-width: 860px) {
+          .hero-hint { bottom: 78px; padding: 9px 16px; }
+          .hero-hint-text-desktop { display: none; }
+          .hero-hint-text-mobile { display: block; }
+          .hero-hint-icon-desktop { display: none; }
+          .hero-hint-icon-mobile { display: block; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .hero-hint-icon-dot, .hero-hint-icon-swipe { animation: none; }
+        }
+
+        /* ── Skip to Categories ───────────────────────────────── */
+        .hero-skip-btn {
+          position: absolute;
+          bottom: 32px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 60; /* above .hero-intro (z-index:50) so it's clickable even while the GLB is still loading */
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 10px 20px;
+          background: var(--bk);
+          color: var(--wh);
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: .02em;
+          border-radius: 999px;
+          box-shadow: 0 4px 16px rgba(0,0,0,.18);
+          transition: opacity .4s ease, transform .4s ease, background .2s ease;
+          pointer-events: all;
+        }
+        .hero-skip-btn:hover { background: var(--cr); }
+        .hero-skip-btn:focus-visible { outline: 2px solid var(--cr); outline-offset: 3px; }
+        .hero-skip-hidden { opacity: 0; transform: translateX(-50%) translateY(8px); pointer-events: none; }
+        @media (max-width: 860px) {
+          .hero-skip-btn { bottom: 22px; padding: 9px 16px; font-size: 11px; }
+        }
+
         /* ── Vignette ─────────────────────────────────────── */
         .hero-vignette {
           position: absolute; inset: 0;
@@ -860,7 +1052,7 @@ function CollectionsGrid() {
   }, []);
 
   return (
-    <section className="section">
+    <section className="section" id="categories" style={{ scrollMarginTop: 84 }}>
       <div className="container">
         <div className="section-header">
           <div className="section-header-left">
@@ -1111,9 +1303,11 @@ function RacketFinder() {
     fetchProducts({ category: 'rackets', limit: 100 }).then(({ data }) => {
       if (!cancelled) setRackets(normalizeProducts(data));
     }).catch(() => {
-      // Genuine fetch failure (e.g. network down) — last-resort local fallback
-      // so the quiz still works; this is not the primary data path.
-      if (!cancelled) setRackets(normalizeProducts(getByCategory('rackets')));
+      // Genuine fetch failure (e.g. network down) — show the existing
+      // "couldn't find a match" empty state below rather than ever
+      // substituting old local/mock racket data, which could show a
+      // product that's since been renamed, discontinued, or repriced.
+      if (!cancelled) setRackets([]);
     });
     return () => { cancelled = true; };
   }, []);
