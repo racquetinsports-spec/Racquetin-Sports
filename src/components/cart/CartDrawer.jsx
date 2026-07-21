@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { formatPrice } from '../../utils/format';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../../store';
 import { useCart } from '../../hooks/useCart';
+import { trackViewCart } from '../../lib/analytics';
 
 export default function CartDrawer() {
   const { items, total, removeItem, updateQty } = useCart();
@@ -14,6 +15,13 @@ export default function CartDrawer() {
     document.body.style.overflow = isOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
+
+  // Track once per open — not on every item change while it stays open.
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (isOpen && !wasOpenRef.current && items.length > 0) trackViewCart(items);
+    wasOpenRef.current = isOpen;
+  }, [isOpen, items]);
 
   return (
     <AnimatePresence>

@@ -14,6 +14,7 @@ import { fetchCart, addToCart, updateCartQty, removeFromCart, clearCart as apiCl
 import { fetchProductsByIds } from '../lib/api/products';
 import { normalizeProducts } from '../utils/normalizeProduct';
 import { useUIStore } from './index';
+import { trackAddToCart, trackRemoveFromCart } from '../lib/analytics';
 
 function normalizeDbRow(row) {
   const p = row.products || {};
@@ -68,12 +69,17 @@ export const useCartStore = create((set, get) => ({
   addItem: async (product, variant = {}, qty = 1, variantId = null) => {
     useUIStore.getState().openCart();
     const { error } = await addToCart(product.id, qty, variant, variantId);
+    if (!error) trackAddToCart(product, { quantity: qty, variant: variant?.color || variant?.grip || undefined });
     await get().refresh();
     return { error };
   },
 
   removeItem: async (id) => {
+    // Look up the item's product/qty BEFORE it's gone — the store
+    // won't have it anymore once refresh() below re-fetches the cart.
+    const removed = get().items.find(i => i.id === id);
     await removeFromCart(id);
+    if (removed?.product) trackRemoveFromCart(removed.product, { quantity: removed.qty, variant: removed.variant?.color || removed.variant?.grip || undefined });
     await get().refresh();
   },
 

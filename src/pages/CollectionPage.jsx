@@ -5,6 +5,7 @@ import { fetchProducts } from '../lib/api/products';
 import { normalizeProducts } from '../utils/normalizeProduct';
 import { filterProducts } from '../utils/filterProducts';
 import { sortBrands } from '../utils/brandOrder';
+import { trackViewItemList } from '../lib/analytics';
 import ProductCard from '../components/product/ProductCard';
 
 const CATEGORY_META = {
@@ -243,7 +244,15 @@ export default function CollectionPage({ category: categoryProp }) {
     return filterProducts(allProducts, effectiveFilters, priceRange);
   }, [allProducts, activeFilters, priceRange, activeBrand]);
 
-  const displayed = sortProducts(filtered, sort);
+  // Memoized (rather than recomputed every render) specifically so the
+  // view_item_list tracking effect below can depend on it without
+  // re-firing on every unrelated re-render.
+  const displayed = useMemo(() => sortProducts(filtered, sort), [filtered, sort]);
+
+  useEffect(() => {
+    if (displayed.length > 0) trackViewItemList(displayed, { listId: `category_${category}`, listName: meta.title });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayed]);
 
   return (
     <div className="col-page">
@@ -456,7 +465,7 @@ export default function CollectionPage({ category: categoryProp }) {
                 </button>
               </div>
             ) : (
-              displayed.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)
+              displayed.map((p, i) => <ProductCard key={p.id} product={p} index={i} listId={`category_${category}`} listName={meta.title} />)
             )}
           </div>
         </div>

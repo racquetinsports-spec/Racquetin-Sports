@@ -6,6 +6,7 @@ import { useUIStore } from '../../store';
 import { fetchProducts, fetchBrandsByCategory } from '../../lib/api/products';
 import { normalizeProducts } from '../../utils/normalizeProduct';
 import { sortBrands, compareBrands } from '../../utils/brandOrder';
+import { trackSearch } from '../../lib/analytics';
 
 const ALL_CATEGORY_SLUGS = ['rackets', 'shoes', 'bags', 'shuttlecocks', 'strings', 'grips', 'apparel'];
 
@@ -57,6 +58,7 @@ export default function SearchOverlay() {
             a.category === 'rackets' && b.category === 'rackets' ? compareBrands(a.brand, b.brand) : 0
           );
           setResults(normalized);
+          trackSearch(query, { resultsCount: normalized.length });
         })
         .catch(() => { if (!cancelled) setResults([]); })
         .finally(() => { if (!cancelled) setSearching(false); });

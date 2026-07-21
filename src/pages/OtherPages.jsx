@@ -16,6 +16,10 @@ import { useSiteContent, pick } from '../hooks/useSiteContent';
 import { fetchAllContent } from '../lib/api/content';
 import { renderLegalMarkdown } from '../utils/renderLegalMarkdown';
 import ProductCard from '../components/product/ProductCard';
+import {
+  trackViewCart, trackBeginCheckout, trackAddShippingInfo,
+  trackAddPaymentInfo, trackPurchase, trackSearch,
+} from '../lib/analytics';
 
 // Mirrors supabase/functions/create-razorpay-order/index.ts — for display
 // only. The server is the sole source of truth for the actual charge
@@ -39,6 +43,18 @@ function estimateCheckoutTotals(subtotal, delivery) {
 
 export function CartPage() {
   const { items, total, removeItem, updateQty } = useCart();
+
+  // Fire once per visit to this page, the first time items are actually
+  // available (the cart hook loads asynchronously) — not on every
+  // subsequent quantity change while the visitor stays on the page.
+  const trackedRef = useRef(false);
+  useEffect(() => {
+    if (!trackedRef.current && items.length > 0) {
+      trackedRef.current = true;
+      trackViewCart(items);
+    }
+  }, [items]);
+
   return (
     <div className="container" style={{ padding: '40px 0 80px' }}>
       <h1 className="t-h1" style={{ marginBottom: 32 }}>Your Cart</h1>
@@ -134,11 +150,25 @@ export function CheckoutPage() {
   // delays entirely.
   useEffect(() => { loadRazorpayScript(); }, []);
 
+  // begin_checkout — once per visit to this page, the moment there's
+  // an actual cart to check out with.
+  const beginCheckoutTrackedRef = useRef(false);
+  useEffect(() => {
+    if (!beginCheckoutTrackedRef.current && items.length > 0) {
+      beginCheckoutTrackedRef.current = true;
+      trackBeginCheckout(items);
+    }
+  }, [items]);
+
   const [form, setForm] = useState({
     firstName: '', lastName: '', email: user?.email || '', phone: '',
     address1: '', address2: '', city: '', postcode: '', country: 'India',
   });
   const [delivery, setDelivery] = useState('std');
+  const handleDeliveryChange = (id) => {
+    setDelivery(id);
+    trackAddShippingInfo(items, { shippingTier: id });
+  };
   const checkoutEstimate = estimateCheckoutTotals(total, delivery);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -230,6 +260,11 @@ export function CheckoutPage() {
     if (createError) { setError(createError.message || 'Could not start checkout.'); setSubmitting(false); return; }
     pendingOrderIdRef.current = rpOrder.order_id;
 
+    // Reached the payment step — this app has no visibility into which
+    // method the customer picks inside Razorpay's own modal, so this
+    // marks "payment step reached" rather than a specific method.
+    trackAddPaymentInfo(items);
+
     // Step 2 — open Razorpay Checkout using the server-issued order id
     // and server-computed amount, not anything computed in this component.
     await initiatePayment({
@@ -308,7 +343,7 @@ export function CheckoutPage() {
               { id: 'nxt', label: 'Next Day', sub: 'Order before 2pm', price: '₹1,299' },
             ].map(d => (
               <label key={d.id} className="delivery-option">
-                <input type="radio" name="delivery" checked={delivery === d.id} onChange={() => setDelivery(d.id)} />
+                <input type="radio" name="delivery" checked={delivery === d.id} onChange={() => handleDeliveryChange(d.id)} />
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>{d.label}</div>
                   <div className="t-small">{d.sub}</div>
@@ -396,7 +431,36 @@ export function OrderConfirmationPage() {
     fetchOrderById(orderId).then(({ data, error }) => {
       if (cancelled) return;
       if (error || !data) setLoadError('Could not load your order.');
-      else setOrder(data);
+      else {
+        setOrder(data);
+        // This is the ONLY place `purchase` fires — reached only after
+        // verify-razorpay-payment has already: verified the signature
+        // server-side, created the order, and updated inventory (see
+        // supabase/functions/verify-razorpay-payment/index.ts). Nothing
+        // client-side ever fabricates this data. trackPurchase() itself
+        // dedupes on data.id via localStorage, so refreshing or
+        // revisiting this URL — including from a bookmark days later —
+        // can't double-count it.
+        const items = (data.order_items || []).map(oi => ({
+          product: {
+            id: oi.product_id,
+            name: oi.name,
+            brand: oi.product?.brand,
+            category: oi.product?.category_slug,
+            price: (oi.price || 0) / 100, // snapshot stored in paise
+          },
+          quantity: oi.qty,
+        }));
+        trackPurchase({
+          orderId: data.id,
+          transactionId: data.order_number,
+          value: (data.total || 0) / 100,
+          tax: (data.tax || 0) / 100,
+          shipping: (data.shipping_cost || 0) / 100,
+          coupon: data.coupon_code || undefined,
+          items,
+        });
+      }
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -521,7 +585,11 @@ export function SearchPage() {
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error) { setLoadError(error.message || 'Search failed.'); setResults([]); }
-        else setResults(normalizeProducts(data));
+        else {
+          const normalized = normalizeProducts(data);
+          setResults(normalized);
+          trackSearch(q, { resultsCount: normalized.length });
+        }
       })
       .catch(err => {
         if (!cancelled) { setLoadError(err.message || 'Search failed.'); setResults([]); }
@@ -553,7 +621,7 @@ export function SearchPage() {
         </div>
       ) : (
         <div className="grid-4">
-          {results.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
+          {results.map((p, i) => <ProductCard key={p.id} product={p} index={i} listId="search_results" listName="Search Results" />)}
         </div>
       )}
     </div>

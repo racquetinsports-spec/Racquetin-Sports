@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
     }
 
     // 3. Fulfill — idempotent, safe even if the webhook already did this.
-    const { order, alreadyFulfilled, error: fulfillError } = await fulfillOrderFromIntent({
+    const { order, alreadyFulfilled, error: fulfillError, emailSent, emailError } = await fulfillOrderFromIntent({
       admin,
       providerOrderId: razorpay_order_id,
       providerPaymentId: razorpay_payment_id,
@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
       processed: true,
     }]);
 
-    return jsonResponse({ success: true, alreadyFulfilled, order });
+    return jsonResponse({ success: true, alreadyFulfilled, order, emailSent, emailError });
   } catch (err) {
     return jsonResponse({ error: err instanceof Error ? err.message : 'Unexpected error' }, 500);
   }

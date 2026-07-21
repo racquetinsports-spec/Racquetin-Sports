@@ -9,6 +9,7 @@ import { useCart } from '../hooks/useCart';
 import { useSiteContent, pick } from '../hooks/useSiteContent';
 import { formatPrice } from '../utils/format';
 import ProductCard from '../components/product/ProductCard';
+import { trackViewItemList } from '../lib/analytics';
 
 // ── Scene data ────────────────────────────────────────────────────
 // pos → CSS class suffix, determines unique layout per scene
@@ -1215,6 +1216,10 @@ function BestSellers() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    if (products?.length) trackViewItemList(products, { listId: 'best_sellers', listName: 'Best Sellers' });
+  }, [products]);
+
   return (
     <section className="section" style={{ background: 'var(--gr-6)' }}>
       <div className="container">
@@ -1229,7 +1234,7 @@ function BestSellers() {
           <p className="t-body">Loading…</p>
         ) : (
           <div className="grid-4">
-            {products.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
+            {products.map((p, i) => <ProductCard key={p.id} product={p} index={i} listId="best_sellers" listName="Best Sellers" />)}
           </div>
         )}
       </div>
@@ -1247,6 +1252,10 @@ function NewArrivals() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    if (products?.length) trackViewItemList(products, { listId: 'new_arrivals', listName: 'New Arrivals' });
+  }, [products]);
+
   return (
     <section className="section">
       <div className="container">
@@ -1261,7 +1270,7 @@ function NewArrivals() {
           <p className="t-body">Loading…</p>
         ) : (
           <div className="grid-4">
-            {products.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
+            {products.map((p, i) => <ProductCard key={p.id} product={p} index={i} listId="new_arrivals" listName="New Arrivals" />)}
           </div>
         )}
       </div>

@@ -4,15 +4,27 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { signIn, signUp, forgotPassword, resetPassword, signInWithGoogle } from '../../lib/auth';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { trackLogin, trackSignUp } from '../../lib/analytics';
 
 // Shared Google button — used on both Login and Register, since Supabase
 // treats OAuth as "sign in or create" in a single step; there's no
-// separate Google-specific signup flow to build.
-function GoogleSignInButton({ redirect, onError }) {
+// separate Google-specific signup flow to build. `mode` is analytics-only
+// (tells us which page the click came from) and never affects the actual
+// auth behavior — Supabase itself decides sign-in-vs-create.
+//
+// Tracked at the moment the redirect to Google is initiated, not after
+// a confirmed return session: Supabase's OAuth flow takes the browser
+// to a full-page redirect immediately on success, so there's no
+// synchronous "it worked" moment in this component to hook into, and
+// the shared /auth/callback landing page (used by OAuth, email
+// verification, and password reset alike) has no reliable way to tell
+// those flows apart after the fact.
+function GoogleSignInButton({ redirect, onError, mode = 'login' }) {
   const [loading, setLoading] = useState(false);
 
   async function handleClick() {
     setLoading(true);
+    if (mode === 'signup') trackSignUp('google'); else trackLogin('google');
     const { error } = await signInWithGoogle(redirect);
     // On success the browser navigates away to Google immediately, so we
     // only ever reach this line on failure (e.g. provider not configured).
@@ -99,12 +111,13 @@ export function LoginPage() {
     const { error: err } = await signIn({ email, password });
     setLoading(false);
     if (err) return setError(err.message);
+    trackLogin('email');
     nav(redirect === 'checkout' ? '/checkout' : '/account');
   }
 
   return (
     <AuthShell title="Sign in" subtitle={redirect === 'checkout' ? 'Sign in to complete your order — your cart carries over.' : 'Welcome back to RacquetIn'}>
-      <GoogleSignInButton redirect={redirect} onError={setError} />
+      <GoogleSignInButton redirect={redirect} onError={setError} mode="login" />
       <AuthDivider />
       <form onSubmit={handleSubmit} className="auth-form">
         {error && <div className="auth-error">{error}</div>}
@@ -149,6 +162,7 @@ export function RegisterPage() {
     const { error: err } = await signUp({ email, password, name });
     setLoading(false);
     if (err) return setError(err.message);
+    trackSignUp('email');
     setSuccess(true);
   }
 
@@ -163,7 +177,7 @@ export function RegisterPage() {
 
   return (
     <AuthShell title="Create account" subtitle="Join RacquetIn for order history and wishlist sync">
-      <GoogleSignInButton redirect={redirect} onError={setError} />
+      <GoogleSignInButton redirect={redirect} onError={setError} mode="signup" />
       <AuthDivider />
       <form onSubmit={handleSubmit} className="auth-form">
         {error && <div className="auth-error">{error}</div>}

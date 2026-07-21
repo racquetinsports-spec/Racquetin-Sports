@@ -24,7 +24,7 @@ export async function fetchOrderById(orderId) {
   if (!user || !isSupabaseConfigured()) return { data: null, error: null };
   const { data, error } = await supabase
     .from('orders')
-    .select(`*, order_items(*, product:product_id(name, slug, product_images(url, is_primary))), payments(*), shipments(*)`)
+    .select(`*, order_items(*, product:product_id(name, slug, brand, category_slug, product_images(url, is_primary))), payments(*), shipments(*)`)
     .eq('id', orderId)
     .eq('user_id', user.id)
     .single();

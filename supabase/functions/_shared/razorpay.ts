@@ -1,5 +1,5 @@
 // ── Razorpay API + signature helpers ─────────────────────────────
-const RAZORPAY_KEY_ID = Deno.env.get('RAZORPAY_KEY_ID')!;
+export const RAZORPAY_KEY_ID = Deno.env.get('RAZORPAY_KEY_ID')!;
 const RAZORPAY_KEY_SECRET = Deno.env.get('RAZORPAY_KEY_SECRET')!;
 
 const RAZORPAY_API = 'https://api.razorpay.com/v1';

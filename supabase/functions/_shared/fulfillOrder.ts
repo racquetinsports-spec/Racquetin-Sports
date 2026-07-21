@@ -18,7 +18,7 @@ export async function fulfillOrderFromIntent({
   providerPaymentId: string;
   paymentMethod?: string | null;
   rawPayment: unknown;
-}): Promise<{ order: any; alreadyFulfilled: boolean; error: string | null }> {
+}): Promise<{ order: any; alreadyFulfilled: boolean; error: string | null; emailSent?: boolean; emailError?: string | null }> {
   const { data: intent, error: intentError } = await admin
     .from('payment_intents')
     .select('*')
@@ -137,21 +137,43 @@ export async function fulfillOrderFromIntent({
 
   // 8. Order confirmation email — best-effort only. A failed send here
   // must never undo or fail the order itself; the order has already
-  // been created, paid, and inventory adjusted by this point.
+  // been created, paid, and inventory adjusted by this point. It IS,
+  // however, logged and returned to the caller — a previous version of
+  // this swallowed every failure completely silently (no log, no
+  // return value), which made "customer says they never got an email"
+  // impossible to diagnose from the Edge Function logs alone.
+  let emailSent = false;
+  let emailError: string | null = null;
   try {
-    const { data: customer } = await admin.from('customers').select('email, full_name').eq('user_id', intent.user_id).maybeSingle();
-    if (customer?.email) {
-      await sendOrderConfirmationEmail({
+    const { data: customer, error: customerError } = await admin
+      .from('customers')
+      .select('email, full_name')
+      .eq('user_id', intent.user_id)
+      .maybeSingle();
+
+    if (customerError) {
+      emailError = `Could not look up customer: ${customerError.message}`;
+    } else if (!customer?.email) {
+      emailError = `No customers row (or no email on it) for user_id ${intent.user_id}`;
+    } else {
+      const result = await sendOrderConfirmationEmail({
         toEmail: customer.email,
         toName: customer.full_name,
         order: { order_number: order.order_number, total: order.total, payment_method: paymentMethod, created_at: order.created_at },
         items: items.map(i => ({ name: i.name, price: i.price, qty: i.qty })),
       });
+      emailSent = result.sent;
+      emailError = result.error || null;
     }
-  } catch {
-    // Swallow — order fulfillment already succeeded above and must not
-    // be affected by an email provider outage or misconfiguration.
+  } catch (err) {
+    emailError = err instanceof Error ? err.message : 'Unknown error sending order confirmation email';
   }
 
-  return { order, alreadyFulfilled: false, error: null };
+  if (!emailSent) {
+    console.error(`[fulfillOrder] order confirmation email NOT sent for order ${order.order_number}: ${emailError}`);
+  } else {
+    console.log(`[fulfillOrder] order confirmation email sent for order ${order.order_number}`);
+  }
+
+  return { order, alreadyFulfilled: false, error: null, emailSent, emailError };
 }

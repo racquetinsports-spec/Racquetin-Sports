@@ -7,6 +7,7 @@ import { normalizeProduct, normalizeProducts } from '../utils/normalizeProduct';
 import { useCart } from '../hooks/useCart';
 import { useWishlist } from '../hooks/useWishlist';
 import ProductCard from '../components/product/ProductCard';
+import { trackViewItem } from '../lib/analytics';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
@@ -61,6 +62,7 @@ export default function ProductDetailPage() {
         }
         const normalized = normalizeProduct(data);
         setProduct(normalized);
+        trackViewItem(normalized);
         const firstAvailable = normalized.variants?.find(v => v.isActive && v.stock > 0);
         if (firstAvailable) setSelectedVariantId(firstAvailable.id);
         const { data: relatedData } = await fetchRelated(normalized.dbId ?? normalized.id, normalized.category);
@@ -319,7 +321,7 @@ export default function ProductDetailPage() {
             </motion.button>
             <button
               className={`btn-icon pdp-wish ${wished ? 'pdp-wish-active' : ''}`}
-              onClick={() => toggle(product.id)}
+              onClick={() => toggle(product.id, product)}
               aria-label="Wishlist"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill={wished ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
@@ -473,7 +475,7 @@ export default function ProductDetailPage() {
             </div>
           </div>
           <div className="grid-4">
-            {related.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
+            {related.map((p, i) => <ProductCard key={p.id} product={p} index={i} listId="related_products" listName="Related Products" />)}
           </div>
         </div>
       )}

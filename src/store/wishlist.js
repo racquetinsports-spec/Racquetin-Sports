@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import { fetchWishlist, toggleWishlist } from '../lib/api/wishlist';
+import { trackAddToWishlist, trackRemoveFromWishlist } from '../lib/analytics';
 
 export const useWishlistStore = create((set, get) => ({
   ids: [],
@@ -23,8 +24,17 @@ export const useWishlistStore = create((set, get) => ({
     }
   },
 
-  toggle: async (id) => {
+  // `product` is optional — passing it (ProductCard/PDP already have
+  // the full product object at their call sites) enables a richer
+  // add_to_wishlist/remove_from_wishlist event; omitting it just skips
+  // tracking for that call, it never breaks the actual toggle.
+  toggle: async (id, product) => {
+    const wasWished = get().ids.includes(id);
     await toggleWishlist(id);
+    if (product) {
+      if (wasWished) trackRemoveFromWishlist(product);
+      else trackAddToWishlist(product);
+    }
     await get().refresh();
   },
 }));

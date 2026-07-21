@@ -4,8 +4,9 @@ import { formatPrice } from '../../utils/format';
 import { motion } from 'framer-motion';
 import { useCart } from '../../hooks/useCart';
 import { useWishlist } from '../../hooks/useWishlist';
+import { trackSelectItem } from '../../lib/analytics';
 
-const ProductCard = memo(function ProductCard({ product, index = 0 }) {
+const ProductCard = memo(function ProductCard({ product, index = 0, listId, listName }) {
   const { addItem } = useCart();
   const { toggle, has } = useWishlist();
   const wished               = has(product.id);
@@ -32,7 +33,11 @@ const ProductCard = memo(function ProductCard({ product, index = 0 }) {
       transition={{ duration: .5, delay: index * .06, ease: [.16,1,.3,1] }}
     >
       {/* Image */}
-      <Link to={`/product/${product.id}`} className="pcard-img-wrap">
+      <Link
+        to={`/product/${product.id}`}
+        className="pcard-img-wrap"
+        onClick={() => trackSelectItem(product, { index, listId, listName })}
+      >
         <div className="pcard-img">
           {primaryImage ? (
             <img
@@ -61,7 +66,7 @@ const ProductCard = memo(function ProductCard({ product, index = 0 }) {
         </div>
         <button
           className={`pcard-wish ${wished ? 'pcard-wish-active' : ''}`}
-          onClick={e => { e.preventDefault(); toggle(product.id); }}
+          onClick={e => { e.preventDefault(); toggle(product.id, product); }}
           aria-label="Add to wishlist"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill={wished ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
@@ -79,7 +84,11 @@ const ProductCard = memo(function ProductCard({ product, index = 0 }) {
           <span className="t-label pcard-series">{product.series}</span>
         </div>
 
-        <Link to={`/product/${product.id}`} className="pcard-name t-h4">{product.name}</Link>
+        <Link
+          to={`/product/${product.id}`}
+          className="pcard-name t-h4"
+          onClick={() => trackSelectItem(product, { index, listId, listName })}
+        >{product.name}</Link>
 
         {/* Racket-specific key specs */}
         {product.playerLevel && (

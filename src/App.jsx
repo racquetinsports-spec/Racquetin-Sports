@@ -7,6 +7,7 @@ import SearchOverlay from './components/ui/SearchOverlay';
 import Footer from './components/layout/Footer';
 import HomePage from './pages/HomePage';           // NOT lazy — above the fold, must be immediate
 import { useSiteContent, pick } from './hooks/useSiteContent';
+import { initAnalytics, trackPageView } from './lib/analytics';
 import './styles/global.css';
 
 // ── Lazy-load all non-home pages ─────────────────────────────────
@@ -83,6 +84,18 @@ export default function App() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
+
+  // GA4 — init once, then track every route change (including the
+  // very first load) as its own page_view. gtag.js's own automatic
+  // page_view is explicitly disabled in initAnalytics() specifically
+  // because it can't see client-side route changes in an SPA; this
+  // effect is what replaces it. Scoped to the storefront only — the
+  // separate /admin router tree in main.jsx doesn't render this
+  // component, so admin pages are intentionally not tracked here.
+  useEffect(() => { initAnalytics(); }, []);
+  useEffect(() => {
+    trackPageView({ path: location.pathname, search: location.search, title: document.title });
+  }, [location.pathname, location.search]);
 
   // Brand color + SEO — driven by Settings once loaded, falling back to
   // the existing hardcoded navy/meta tags if a field isn't set yet.
