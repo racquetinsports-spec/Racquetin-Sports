@@ -12,6 +12,17 @@ import ProductCard from '../components/product/ProductCard';
 
 // ── Scene data ────────────────────────────────────────────────────
 // pos → CSS class suffix, determines unique layout per scene
+//
+// Each scene's copy is matched to what the camera keyframes (see KF
+// below) actually show at that point in the scroll, not just picked
+// in an arbitrary order:
+//   scene 1 (KF t=.18, target y=-2.8 — lowest point of the sequence) → grip/handle
+//   scene 2 (KF t=.36, target y=-2.2 — still low, opposite side)     → shaft/frame material
+//   scene 3 (KF t=.55, target y=+0.9 — upper racket)                 → head/string bed
+//   scene 4 (KF t=.72, target y=+2.2 + the sequence's widest camera
+//            sweep, x:-2.0→+2.2)                                     → motion/aerodynamics
+// None of this — camera position, timing, or the racket's own
+// rotation — was touched; only the text content changed.
 const SCENES = [
   {
     pos: 'bc',   // bottom-center
@@ -22,43 +33,43 @@ const SCENES = [
     spec: null,
   },
   {
-    pos: 'lm',   // left-middle
-    ey: '01 — Rotation',
-    h1: 'Rotational Generator',
-    h2: 'System',
-    body: 'Balanced power through every transition.',
+    pos: 'lm',   // left-middle — camera favors the handle/grip
+    ey: '01 — Grip',
+    h1: 'Control Begins',
+    h2: 'In Your Hand',
+    body: 'Engineered for confident handling, stable feedback, and precise shot control through every rally.',
     spec: null,
   },
   {
-    pos: 'rl',   // right-lower
-    ey: '02 — Shaft',
-    h1: 'Namd Graphite',
-    h2: 'Shaft',
-    body: 'Faster snapback and explosive power generation.',
+    pos: 'rl',   // right-lower — camera favors the shaft/frame material
+    ey: '02 — Graphite',
+    h1: 'Strength Without',
+    h2: 'The Weight',
+    body: 'Advanced graphite structures deliver stability, responsiveness, and efficient energy transfer without unnecessary bulk.',
     spec: null,
   },
   {
-    pos: 'rh',   // right-upper (safe zone: top ≥ 120px)
-    ey: '03 — Flex',
-    h1: 'Energy Boost',
-    h2: 'Cap Plus',
-    body: 'Improved shaft flex and energy transfer.',
+    pos: 'rh',   // right-upper (safe zone: top ≥ 120px) — camera favors the head/strings
+    ey: '03 — String Bed',
+    h1: 'Power, Shaped',
+    h2: 'By Precision',
+    body: 'A refined string-bed response supports clean impact, controlled touch, and consistent shuttle feedback.',
     spec: null,
   },
   {
-    pos: 'rm',   // right-middle
+    pos: 'rm',   // right-middle — the widest camera sweep in the sequence
     ey: '04 — Aerodynamics',
-    h1: 'Slim Aero',
-    h2: 'Frame',
-    body: 'Higher swing speeds with excellent control.',
+    h1: 'Built To',
+    h2: 'Move Faster',
+    body: 'Streamlined frame geometry reduces air resistance for quicker swings, sharper reactions, and faster recovery between shots.',
     spec: null,
   },
   {
-    pos: 'cc',   // dead center
-    ey: 'Yonex ASTROX 100ZZ',
+    pos: 'cc',   // dead center — closing brand statement
+    ey: 'The RacquetIn Collection',
     h1: 'Your Game.',
     h2: 'Engineered.',
-    body: 'The ASTROX 100ZZ — Available Now',
+    body: 'Precision-built, ready for every rally.',
     spec: null,
   },
 ];
@@ -547,11 +558,11 @@ function HeroCanvas({ heroText, heroCta }) {
             exit={{ opacity: 0 }}
             transition={{ duration: .6, delay: .3, ease: [.16, 1, .3, 1] }}
           >
-            <div className="hero-feature-eyebrow">Featured Product</div>
+            <div className="hero-feature-eyebrow">Featured</div>
             <div className="hero-feature-tag">Interactive 3D Showcase</div>
-            <div className="hero-feature-name">Yonex ASTROX 100ZZ</div>
-            <div className="hero-feature-sub">Professional Performance Series</div>
-            <div className="hero-feature-cta">Explore the racket in full 3D.</div>
+            <div className="hero-feature-name">Performance, By Design</div>
+            <div className="hero-feature-sub">The engineering behind every RacquetIn racket</div>
+            <div className="hero-feature-cta">Explore in full 3D.</div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1027,7 +1038,20 @@ function HeroCanvas({ heroText, heroCta }) {
         }
 
         @media (max-width: 640px) {
-          .hero-sp-lm, .hero-sp-rl, .hero-sp-rh, .hero-sp-rm {
+          /* lm/rm are vertically centered in their base rule via
+             translateY(-50%) (see .hero-sp-lm / .hero-sp-rm above).
+             transform is not additive across rules — a mobile override
+             that only set translateX(-50%) here would silently replace
+             that Y-centering and leave the block sitting too low.
+             rl/rh don't use translateY (they're anchored via top/bottom
+             instead), so they only ever needed the X half. */
+          .hero-sp-lm, .hero-sp-rm {
+            left: 50%; right: auto;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            max-width: 80vw;
+          }
+          .hero-sp-rl, .hero-sp-rh {
             left: 50%; right: auto;
             transform: translateX(-50%);
             text-align: center;
@@ -1246,18 +1270,17 @@ function NewArrivals() {
 }
 
 function TechStrip() {
-  // Same four technologies the hero's scroll scenes already showcase
+  // Same four performance themes the hero's scroll scenes now showcase
   // (see SCENES above) — copy reused verbatim so this section reads as
-  // a continuation of the hero rather than a separate, generic list.
-  // The old card set (AeroForge Frame, Power Core Shaft, etc.) named
-  // technologies that don't exist on the ASTROX 100ZZ and carried
-  // invented stats (23%, 94%, 98%, 500Hz) — removed rather than kept
-  // as unverifiable claims about a real, named product.
+  // a continuation of the hero rather than a separate list. These are
+  // positioned as principles represented across the RacquetIn racket
+  // range, not specs of one named model — no brand or model name here,
+  // consistent with the hero above.
   const techs = [
-    { name: 'Rotational Generator System', desc: 'Balanced power through every transition.',            icon: '01' },
-    { name: 'Namd Graphite Shaft',         desc: 'Faster snapback and explosive power generation.',      icon: '02' },
-    { name: 'Energy Boost Cap Plus',       desc: 'Improved shaft flex and energy transfer.',              icon: '03' },
-    { name: 'Slim Aero Frame',             desc: 'Higher swing speeds with excellent control.',           icon: '04' },
+    { name: 'Performance Grip',    desc: 'Confident handling, stable feedback, and precise shot control through every rally.',           icon: '01' },
+    { name: 'Graphite Construction', desc: 'Stability, responsiveness, and efficient energy transfer without unnecessary bulk.',           icon: '02' },
+    { name: 'Precision String Bed', desc: 'Clean impact, controlled touch, and consistent shuttle feedback.',                              icon: '03' },
+    { name: 'Aerodynamic Frame',   desc: 'Reduced air resistance for quicker swings and faster recovery between shots.',                    icon: '04' },
   ];
   return (
     <section className="section" style={{ background: 'var(--bk)', color: '#fff' }}>
