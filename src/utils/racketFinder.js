@@ -6,6 +6,8 @@
 // in src/data/products.js (or the Supabase-backed product API, if
 // that's what the caller passes in).
 
+import { compareBrands } from './brandOrder';
+
 const LEVEL_ORDER = ['Beginner', 'Intermediate', 'Advanced', 'Professional'];
 
 export const BUDGET_RANGES = [
@@ -141,7 +143,12 @@ export function recommendRackets(answers, rackets, limit = 3) {
     return { product, score: total };
   });
 
-  scored.sort((a, b) => b.score - a.score);
+  // Fit score decides the ranking; brand priority only breaks exact
+  // ties (so equally-good matches settle in a deterministic,
+  // Yonex → Li-Ning → Hundred → other order instead of whatever order
+  // the candidate list happened to arrive in). It never outranks a
+  // genuinely better-fitting racket from a lower-priority brand.
+  scored.sort((a, b) => b.score - a.score || compareBrands(a.product.brand, b.product.brand));
 
   return scored.slice(0, limit).map(({ product, score }) => ({
     product,

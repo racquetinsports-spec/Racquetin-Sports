@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { fetchProducts } from '../lib/api/products';
 import { normalizeProducts } from '../utils/normalizeProduct';
 import { filterProducts } from '../utils/filterProducts';
+import { sortBrands } from '../utils/brandOrder';
 import ProductCard from '../components/product/ProductCard';
 
 const CATEGORY_META = {
@@ -170,7 +171,7 @@ export default function CollectionPage({ category: categoryProp }) {
   // Yonex-only Series list this replaced.
   const availableBrands = useMemo(() => {
     if (category !== 'rackets') return [];
-    return [...new Set(allProducts.map(p => p.brand).filter(Boolean))].sort();
+    return sortBrands(allProducts.map(p => p.brand));
   }, [allProducts, category]);
 
   const toggleFilter = (group, value) => {
@@ -328,6 +329,38 @@ export default function CollectionPage({ category: categoryProp }) {
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
                   </div>
+                {/* Brand — rackets only. Same ordered brand list and
+                    same activeBrand state as the BrandTabs pill row
+                    above the grid, so picking a brand here or there
+                    stays in sync either way. */}
+                {category === 'rackets' && availableBrands.length > 0 && (
+                  <div className="filter-group">
+                    <div className="filter-group-head">Brand</div>
+                    <label className={`filter-option ${!activeBrand ? 'filter-option-active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="filter-rackets-Brand"
+                        checked={!activeBrand}
+                        onChange={() => setActiveBrand(null)}
+                        className="filter-check filter-radio"
+                      />
+                      <span>All</span>
+                    </label>
+                    {availableBrands.map(b => (
+                      <label key={b} className={`filter-option ${activeBrand === b ? 'filter-option-active' : ''}`}>
+                        <input
+                          type="radio"
+                          name="filter-rackets-Brand"
+                          checked={activeBrand === b}
+                          onChange={() => setActiveBrand(b)}
+                          className="filter-check filter-radio"
+                        />
+                        <span>{b}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
                 {Object.entries(meta.filters).map(([group, values]) => {
                   const singleSelect = isSingleSelectGroup(category, group);
                   const groupActive = (activeFilters[group] || []).length > 0;

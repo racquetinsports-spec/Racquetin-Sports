@@ -4,6 +4,7 @@
 
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { products as localProducts, getById as localGetById, getByCategory as localGetByCategory, searchProducts as localSearch, getBestSellers as localBestSellers, getNewArrivals as localNewArrivals } from '../../data/products';
+import { sortBrands, compareBrands } from '../../utils/brandOrder';
 
 // ── Slug → UUID resolution ──────────────────────────────────────────
 // Local catalogue IDs (e.g. 'arcsaber-7-tour') are slugs, but Supabase
@@ -71,11 +72,20 @@ export async function fetchCategoryCounts(slugs) {
 // Brands are deduped, sorted, and any category with zero active
 // products carrying a brand is simply omitted from the result so the
 // nav never renders an empty dropdown.
+//
+// Rackets specifically use the Yonex → Li-Ning → Hundred priority
+// order (via sortBrands, which also normalizes naming variants like
+// "Li Ning"/"LI-NING" to one canonical entry). Every other category
+// stays plain alphabetical — the priority list is racket-specific and
+// shouldn't silently reorder shoe/apparel/etc. brands.
 export async function fetchBrandsByCategory(categorySlugs) {
+  const orderForCategory = (slug, brands) =>
+    slug === 'rackets' ? sortBrands(brands) : [...new Set(brands.filter(Boolean))].sort();
+
   if (!isSupabaseConfigured()) {
     const map = {};
     categorySlugs.forEach(slug => {
-      const brands = [...new Set(localGetByCategory(slug).map(p => p.brand).filter(Boolean))].sort();
+      const brands = orderForCategory(slug, localGetByCategory(slug).map(p => p.brand));
       if (brands.length) map[slug] = brands;
     });
     return { data: map, error: null };
@@ -90,15 +100,16 @@ export async function fetchBrandsByCategory(categorySlugs) {
 
   if (error) return { data: {}, error };
 
-  const sets = {};
+  const raw = {};
   (data || []).forEach(row => {
     if (!row.brand) return;
-    (sets[row.category_slug] ||= new Set()).add(row.brand.trim());
+    (raw[row.category_slug] ||= []).push(row.brand.trim());
   });
 
   const result = {};
-  Object.entries(sets).forEach(([slug, set]) => {
-    if (set.size) result[slug] = [...set].sort();
+  Object.entries(raw).forEach(([slug, brands]) => {
+    const ordered = orderForCategory(slug, brands);
+    if (ordered.length) result[slug] = ordered;
   });
   return { data: result, error: null };
 }
@@ -242,10 +253,18 @@ export async function fetchNewArrivals(limit = 6) {
 }
 
 export async function fetchRelated(productId, category, limit = 4) {
+  // For rackets, pull a slightly larger candidate pool than we need
+  // and order it by brand priority (Yonex → Li-Ning → Hundred → other)
+  // before trimming to `limit`, so a Yonex racket's "Related Products"
+  // surfaces other Yonex/Li-Ning/Hundred rackets first rather than
+  // whatever order the DB happens to return. Every other category is
+  // untouched — same query, same natural order as before.
+  const pool = category === 'rackets' ? Math.max(limit * 3, 12) : limit;
+
   if (!isSupabaseConfigured()) {
-    const p = localGetById(productId);
-    const related = localGetByCategory(category).filter(r => r.id !== productId).slice(0, limit);
-    return { data: related, error: null };
+    let related = localGetByCategory(category).filter(r => r.id !== productId);
+    if (category === 'rackets') related = [...related].sort((a, b) => compareBrands(a.brand, b.brand));
+    return { data: related.slice(0, limit), error: null };
   }
   const { data, error } = await supabase
     .from('products')
@@ -253,8 +272,12 @@ export async function fetchRelated(productId, category, limit = 4) {
     .eq('category_slug', category)
     .neq('id', productId)
     .eq('is_active', true)
-    .limit(limit);
-  return { data: data || [], error };
+    .limit(pool);
+  if (error) return { data: [], error };
+
+  let related = data || [];
+  if (category === 'rackets') related = [...related].sort((a, b) => compareBrands(a.brand, b.brand));
+  return { data: related.slice(0, limit), error: null };
 }
 
 // ── Admin reads ───────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '../../store';
 import { fetchProducts, fetchBrandsByCategory } from '../../lib/api/products';
 import { normalizeProducts } from '../../utils/normalizeProduct';
+import { sortBrands, compareBrands } from '../../utils/brandOrder';
 
 const ALL_CATEGORY_SLUGS = ['rackets', 'shoes', 'bags', 'shuttlecocks', 'strings', 'grips', 'apparel'];
 
@@ -29,7 +30,10 @@ export default function SearchOverlay() {
     if (!searchOpen || suggestions.length) return;
     fetchBrandsByCategory(ALL_CATEGORY_SLUGS)
       .then(({ data }) => {
-        const brands = [...new Set(Object.values(data || {}).flat())].sort();
+        // sortBrands puts Yonex/Li-Ning/Hundred first (per the shared
+        // priority) and leaves every other brand — including non-racket
+        // ones mixed in from other categories — alphabetical after them.
+        const brands = sortBrands(Object.values(data || {}).flat());
         setSuggestions(brands.slice(0, 6));
       })
       .catch(() => setSuggestions([]));
@@ -41,7 +45,19 @@ export default function SearchOverlay() {
     setSearching(true);
     const timer = setTimeout(() => {
       fetchProducts({ search: query, limit: 8 })
-        .then(({ data }) => { if (!cancelled) setResults(normalizeProducts(data)); })
+        .then(({ data }) => {
+          if (cancelled) return;
+          const normalized = normalizeProducts(data);
+          // Only reorders pairs where BOTH items are rackets (stable
+          // sort leaves every other pair, including racket-vs-non-racket,
+          // exactly where it was) — so Yonex/Li-Ning/Hundred rackets
+          // surface first among themselves without disturbing overall
+          // search relevance for other categories.
+          normalized.sort((a, b) =>
+            a.category === 'rackets' && b.category === 'rackets' ? compareBrands(a.brand, b.brand) : 0
+          );
+          setResults(normalized);
+        })
         .catch(() => { if (!cancelled) setResults([]); })
         .finally(() => { if (!cancelled) setSearching(false); });
     }, 250); // debounce so every keystroke doesn't fire a query
