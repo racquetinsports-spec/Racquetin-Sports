@@ -136,6 +136,20 @@ export function CartPage() {
 }
 
 // ── Checkout Page ─────────────────────────────────────────────────
+// Shiprocket's order-creation API requires a valid Indian state on
+// every order — this list matches what it expects (28 states + 8 union
+// territories), used as a dropdown rather than free text specifically
+// so it can never contain an invalid/misspelled value.
+const INDIA_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat',
+  'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh',
+  'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh',
+  'Uttarakhand', 'West Bengal',
+  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+];
+
 export function CheckoutPage() {
   const { items, total, clearCart } = useCart();
   const { user } = useAuth();
@@ -162,7 +176,7 @@ export function CheckoutPage() {
 
   const [form, setForm] = useState({
     firstName: '', lastName: '', email: user?.email || '', phone: '',
-    address1: '', address2: '', city: '', postcode: '', country: 'India',
+    address1: '', address2: '', city: '', state: '', postcode: '', country: 'India',
   });
   const [delivery, setDelivery] = useState('std');
   const handleDeliveryChange = (id) => {
@@ -176,8 +190,17 @@ export function CheckoutPage() {
   const pendingOrderIdRef = useRef(null); // current Razorpay order_id, for the dismiss-poll below
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+  // Phone and postcode both need to be plain digits, capped at the
+  // length couriers actually validate (10 for an Indian mobile number,
+  // 6 for a PIN code) — Shiprocket rejects anything else outright, and
+  // catching it here at entry time is a much better experience than a
+  // confusing failure an admin hits later trying to create a shipment.
+  const setDigits = (k, maxLength) => (e) => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, maxLength);
+    setForm(f => ({ ...f, [k]: digits }));
+  };
 
-  const requiredFilled = form.firstName && form.email && form.phone && form.address1 && form.city && form.postcode;
+  const requiredFilled = form.firstName && form.email && form.phone && form.address1 && form.city && form.state && form.postcode;
 
   // Step 3 (of the 3-step flow) — the browser NEVER creates the order.
   // It hands Razorpay's response to the server, which recomputes the
@@ -321,7 +344,7 @@ export function CheckoutPage() {
               <input className="input" placeholder="Last name" value={form.lastName} onChange={set('lastName')} />
             </div>
             <input className="input" placeholder="Email address" style={{ marginTop: 12 }} value={form.email} onChange={set('email')} />
-            <input className="input" placeholder="Phone number" style={{ marginTop: 12 }} value={form.phone} onChange={set('phone')} />
+            <input className="input" placeholder="Phone number" style={{ marginTop: 12 }} type="tel" inputMode="numeric" maxLength={10} value={form.phone} onChange={setDigits('phone', 10)} />
           </div>
           <div className="checkout-section">
             <h3 className="t-h4" style={{ marginBottom: 20 }}>Shipping Address</h3>
@@ -329,11 +352,22 @@ export function CheckoutPage() {
             <input className="input" placeholder="Address line 2 (optional)" style={{ marginTop: 12 }} value={form.address2} onChange={set('address2')} />
             <div className="checkout-grid-2" style={{ marginTop: 12 }}>
               <input className="input" placeholder="City" value={form.city} onChange={set('city')} />
-              <input className="input" placeholder="Postcode" value={form.postcode} onChange={set('postcode')} />
+              <input className="input" placeholder="Postcode" type="tel" inputMode="numeric" maxLength={6} value={form.postcode} onChange={setDigits('postcode', 6)} />
             </div>
-            <select className="select" style={{ marginTop: 12, width: '100%' }} value={form.country} onChange={set('country')}>
-              <option>India</option><option>United Kingdom</option><option>United States</option><option>Australia</option>
+            <select className="select" style={{ marginTop: 12, width: '100%' }} value={form.state} onChange={set('state')}>
+              <option value="">Select state</option>
+              {INDIA_STATES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
+            {/* Country intentionally fixed to India, not a dropdown —
+                Razorpay here only processes INR, tax is a fixed India
+                GST rate, and Shiprocket's order API (see
+                supabase/functions/shiprocket-shipment) is domestic-only.
+                Offering UK/US/Australia implied a shipping capability
+                that didn't actually exist anywhere in the fulfillment
+                path; if international shipping becomes a real feature,
+                it needs its own currency/tax/courier handling, not just
+                this field turned back into a select. */}
+            <input className="input" style={{ marginTop: 12, width: '100%' }} value="India" disabled />
           </div>
           <div className="checkout-section">
             <h3 className="t-h4" style={{ marginBottom: 20 }}>Delivery Method</h3>

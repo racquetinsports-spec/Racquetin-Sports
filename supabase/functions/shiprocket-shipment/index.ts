@@ -128,6 +128,13 @@ Deno.serve(async (req) => {
         throw new Error('SHIPROCKET_PICKUP_LOCATION not configured as an Edge Function secret');
       }
       const addr = order?.shipping_address || {};
+      if (addr.country && addr.country !== 'India') {
+        // Checkout is now India-only (see OtherPages.jsx CheckoutPage),
+        // but this guards any order placed before that fix — Shiprocket's
+        // order-creation API used here is domestic-only, so attempting
+        // it would just fail with a confusing generic validation error.
+        throw new Error(`Cannot create a Shiprocket shipment for a non-India order (country: ${addr.country}). Ship this one manually.`);
+      }
       const items = (order?.order_items || []).map((i: any) => ({
         name: i.name,
         sku: i.product_id || i.id,
