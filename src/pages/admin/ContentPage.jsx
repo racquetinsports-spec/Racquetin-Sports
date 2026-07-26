@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import {
   fetchAllContent, updateContent, fetchFaqs, createFaq, updateFaq, deleteFaq,
 } from '../../lib/api/content';
+import { fetchSiteSettings, updateSiteSettings } from '../../lib/api/admin';
 import { listMedia, uploadMedia, replaceMedia, deleteMedia } from '../../lib/api/media';
 import { Toggle, Modal } from './shared/AdminUI';
 
