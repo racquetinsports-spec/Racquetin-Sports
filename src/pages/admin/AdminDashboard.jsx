@@ -214,29 +214,17 @@ export function AdminHome() {
         </>
       )}
 
-      <style>{`
-        .admin-page { padding:32px; max-width:1200px; }
-        .admin-page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; }
-        .admin-page-title { font-size:22px; font-weight:700; letter-spacing:-.02em; }
-        .admin-page-loading { padding:48px; text-align:center; color:var(--gr-2); font-size:14px; }
-        .admin-stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
-        .admin-stat-card { background:var(--wh); border:1px solid var(--gr-5); border-radius:var(--r); padding:20px 24px; }
-        .admin-stat-warn { border-color:#fca5a5; background:#fff5f5; }
-        .admin-stat-value { font-size:28px; font-weight:700; letter-spacing:-.04em; margin-bottom:4px; }
-        .admin-stat-label { font-size:11px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:var(--gr-2); }
-        .admin-alert { padding:12px 16px; background:#fffbeb; border:1px solid #fde68a; border-radius:var(--r-sm); font-size:13px; margin-bottom:20px; }
-        .admin-card { background:var(--wh); border:1px solid var(--gr-5); border-radius:var(--r); margin-bottom:20px; }
-        .admin-card-header { display:flex; align-items:center; justify-content:space-between; padding:20px 24px; border-bottom:1px solid var(--gr-5); }
-        .admin-card-title { font-size:15px; font-weight:600; letter-spacing:-.01em; }
-        .admin-table { width:100%; border-collapse:collapse; font-size:13px; }
-        .admin-table th { padding:10px 24px; text-align:left; font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--gr-2); border-bottom:1px solid var(--gr-5); }
-        .admin-table td { padding:12px 24px; border-bottom:1px solid var(--gr-5); }
-        .admin-table tr:last-child td { border-bottom:none; }
-        .admin-link { color:var(--cr); font-weight:500; }
-        .admin-muted { color:var(--gr-2); }
-        .admin-status-pill { display:inline-block; padding:2px 8px; border-radius:100px; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
-        @media(max-width:900px){ .admin-stats-grid{grid-template-columns:1fr 1fr;} }
-      `}</style>
+      {/* This page's shared card/page CSS (.admin-page, .admin-card, etc.)
+          used to live here, as a <style> tag local to this component.
+          Since React removes a component's <style> tag from the DOM when
+          it unmounts, that meant .admin-card/.admin-page effectively had
+          NO styling at all on every other admin page except this one —
+          the moment you navigated away from /admin, cards lost their
+          background/border/radius/padding entirely. That's the real root
+          cause of the "flat, unstyled" report on Order Detail. Moved to
+          shared/AdminUI.jsx's AdminPagesStyles, which renders once in
+          AdminLayout and is present on every admin route regardless of
+          which page is currently mounted. */}
     </div>
   );
 }

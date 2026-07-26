@@ -289,6 +289,57 @@ export function AdminPagesStyles() {
       .admin-empty-icon { width:56px; height:56px; margin:0 auto 16px; display:flex; align-items:center; justify-content:center; background:var(--gr-6); border-radius:50%; color:var(--gr-3); }
       .admin-empty h3 { font-size:16px; font-weight:600; margin-bottom:6px; }
       .admin-empty p { font-size:13px; color:var(--gr-2); max-width:340px; margin:0 auto 20px; line-height:1.5; }
+
+      /* ── Shared admin page/card system ──────────────────────────
+         Relocated from AdminHome's own component-local <style> tag,
+         where it only ever existed in the DOM while that specific page
+         was mounted — meaning every OTHER admin page had no card
+         styling at all the moment you navigated away from /admin. This
+         is the one place it needs to live, since AdminPagesStyles
+         renders once in AdminLayout and is present on every route.
+         Card radius/shadow are intentionally distinct from the base
+         --r token (used for buttons/inputs site-wide) — bumped up
+         slightly for a more premium container feel without going as
+         far as a fully rounded/pill look. */
+      .admin-page { max-width:1480px; margin:0 auto; padding:24px 32px 48px; }
+      .admin-page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; }
+      .admin-page-title { font-size:28px; font-weight:700; letter-spacing:-.02em; }
+      .admin-page-loading { padding:48px; text-align:center; color:var(--gr-2); font-size:14px; }
+      .admin-stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+      .admin-stat-card { background:var(--wh); border:1px solid rgba(15,23,42,.08); border-radius:12px; box-shadow:0 2px 8px rgba(15,23,42,.04); padding:20px 24px; }
+      .admin-stat-warn { border-color:#fca5a5; background:#fff5f5; }
+      .admin-stat-value { font-size:28px; font-weight:700; letter-spacing:-.04em; margin-bottom:4px; }
+      .admin-stat-label { font-size:11px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:var(--gr-2); }
+      .admin-alert { padding:12px 16px; background:#fffbeb; border:1px solid #fde68a; border-radius:var(--r-sm); font-size:13px; margin-bottom:20px; }
+      /* No default padding here, deliberately — matches the original,
+         proven layout model where .admin-card-header carries its own
+         padding and each page adds padding to its own body content
+         below the header. Introducing card-level default padding was
+         tried and reverted: it silently conflicts with per-instance
+         overrides several pages already rely on (e.g. the Shipment
+         panel's header, which opts out of the boxed-header look
+         entirely via padding:0). Fixing what actually caused the
+         reported bug (this rule not being in scope on any page except
+         AdminHome) doesn't require changing that model too. */
+      .admin-card { background:var(--wh); border:1px solid rgba(15,23,42,.08); border-radius:12px; box-shadow:0 2px 8px rgba(15,23,42,.04); margin-bottom:20px; }
+      .admin-card-header { display:flex; align-items:center; justify-content:space-between; padding:20px 24px; border-bottom:1px solid rgba(15,23,42,.08); }
+      .admin-card-title { font-size:18px; font-weight:600; letter-spacing:-.01em; }
+      /* Standard body-content padding for anything sitting below a
+         .admin-card-header — wrap a card's content in this rather than
+         adding ad-hoc padding per page. Kept separate from .admin-card
+         itself (see note above) so pages that need edge-to-edge content
+         (tables, image grids) can simply not use it. */
+      .admin-card-body { padding:20px 24px; }
+      .admin-table { width:100%; border-collapse:collapse; font-size:13px; }
+      .admin-table th { padding:10px 24px; text-align:left; font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--gr-2); border-bottom:1px solid var(--gr-5); }
+      .admin-table td { padding:12px 24px; border-bottom:1px solid var(--gr-5); }
+      .admin-table tr:last-child td { border-bottom:none; }
+      .admin-link { color:var(--cr); font-weight:500; }
+      .admin-muted { color:var(--gr-2); }
+      .admin-status-pill { display:inline-block; padding:2px 8px; border-radius:100px; font-size:10px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+      @media(max-width:1024px){ .admin-page { padding:24px 24px 40px; } }
+      @media(max-width:900px){ .admin-stats-grid{grid-template-columns:1fr 1fr;} }
+      @media(max-width:640px){ .admin-page { padding:16px 16px 32px; } }
     `}</style>
   );
 }

@@ -225,7 +225,7 @@ export function AdminOrderDetailPage() {
   );
 
   return (
-    <div className="admin-page aod-max">
+    <div className="admin-page">
       {/* ── Header ── */}
       <div className="aod-print-hide">
         <Link to="/admin/orders" className="aod-back-link">
@@ -288,7 +288,7 @@ export function AdminOrderDetailPage() {
         <div className="aod-main">
           <div className="admin-card">
             <div className="admin-card-header"><h2 className="admin-card-title">Purchased Products</h2></div>
-            <div className="aod-products">
+            <div className="aod-products admin-card-body">
               {(order.order_items || []).map(i => (
                 <div key={i.id} className="aod-product-row">
                   <div className="aod-product-img">
@@ -326,7 +326,7 @@ export function AdminOrderDetailPage() {
           <div className="aod-bottom-row">
             <div className="admin-card">
               <div className="admin-card-header"><h2 className="admin-card-title">Order Timeline</h2></div>
-              <div className="aod-vtimeline">
+              <div className="aod-vtimeline admin-card-body">
                 {lifecycle.map((stage, i) => (
                   <div key={stage.key} className={`aod-vt-item ${stage.done ? 'aod-vt-done' : 'aod-vt-pending'}`}>
                     <div className="aod-vt-icon"><Icon d={stage.icon} size={12}/></div>
@@ -345,16 +345,18 @@ export function AdminOrderDetailPage() {
 
           <div className="admin-card aod-print-hide" style={{ marginTop: 24 }} id="aod-notes">
             <div className="admin-card-header"><h2 className="admin-card-title">Notes</h2></div>
-            <textarea
-              className="input"
-              rows={4}
-              placeholder="Internal notes about this order — not visible to the customer."
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-            />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-              <button className="btn btn-primary btn-sm" onClick={handleSaveNotes} disabled={notesSaving}>{notesSaving ? 'Saving…' : 'Save Notes'}</button>
-              {notesSaved && <span className="acm-saved-flash">Saved ✓</span>}
+            <div className="admin-card-body">
+              <textarea
+                className="input"
+                rows={4}
+                placeholder="Internal notes about this order — not visible to the customer."
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+                <button className="btn btn-primary btn-sm" onClick={handleSaveNotes} disabled={notesSaving}>{notesSaving ? 'Saving…' : 'Save Notes'}</button>
+                {notesSaved && <span className="acm-saved-flash">Saved ✓</span>}
+              </div>
             </div>
           </div>
         </div>
@@ -363,7 +365,7 @@ export function AdminOrderDetailPage() {
         <div className="aod-side aod-print-hide">
           <div className="admin-card">
             <div className="admin-card-header"><h2 className="admin-card-title">Customer</h2></div>
-            <div className="aod-customer-card">
+            <div className="aod-customer-card admin-card-body">
               <div className="aod-avatar">{initials(customerName, customerEmail)}</div>
               <div className="aod-address-name">{customerName}</div>
               <div className="admin-muted t-small">{customerEmail}</div>
@@ -390,39 +392,45 @@ export function AdminOrderDetailPage() {
                 </a>
               )}
             </div>
-            <AddressBlock address={order.shipping_address} />
-            {order.shipping_address && <div style={{ marginTop: 12, textAlign: 'right' }}><CopyBtn text={addressToText(order.shipping_address)} label="Copy Address" /></div>}
+            <div className="admin-card-body">
+              <AddressBlock address={order.shipping_address} />
+              {order.shipping_address && <div style={{ marginTop: 12, textAlign: 'right' }}><CopyBtn text={addressToText(order.shipping_address)} label="Copy Address" /></div>}
+            </div>
           </div>
 
           <div className="admin-card" style={{ marginTop: 20 }}>
             <div className="admin-card-header"><h2 className="admin-card-title">Billing Address</h2></div>
-            {billingSameAsShipping ? (
-              <p className="admin-muted t-small">Same as shipping address.</p>
-            ) : (
-              <AddressBlock address={order.billing_address} />
-            )}
+            <div className="admin-card-body">
+              {billingSameAsShipping ? (
+                <p className="admin-muted t-small">Same as shipping address.</p>
+              ) : (
+                <AddressBlock address={order.billing_address} />
+              )}
+            </div>
           </div>
 
           {/* Payment Details and Price Breakdown kept as two separate
               cards per this brief's explicit "don't mix these together". */}
           <div className="admin-card" style={{ marginTop: 20 }}>
             <div className="admin-card-header"><h2 className="admin-card-title">Payment Details</h2></div>
-            {latestPayment ? (
-              <div className="aod-payment">
-                <div className="aod-payment-row"><span>Status</span><StatusPill value={latestPayment.status} colors={PAYMENT_STATUS_COLORS} /></div>
-                <div className="aod-payment-row"><span>Method</span><span style={{ textTransform: 'capitalize' }}>{latestPayment.payment_method || '—'}</span></div>
-                <div className="aod-payment-row"><span>Transaction ID</span><span className="admin-muted t-small">{latestPayment.provider_payment_id || '—'}</span></div>
-                <div className="aod-payment-row"><span>Verification</span><span>{latestPayment.signature_verified ? '✓ Verified' : 'Unverified'}</span></div>
-                <div className="aod-payment-row"><span>Payment Date</span><span>{latestPayment.captured_at ? formatDate(latestPayment.captured_at) : '—'}</span></div>
-              </div>
-            ) : (
-              <p className="admin-muted t-small">No payment recorded yet.</p>
-            )}
+            <div className="admin-card-body">
+              {latestPayment ? (
+                <div className="aod-payment">
+                  <div className="aod-payment-row"><span>Status</span><StatusPill value={latestPayment.status} colors={PAYMENT_STATUS_COLORS} /></div>
+                  <div className="aod-payment-row"><span>Method</span><span style={{ textTransform: 'capitalize' }}>{latestPayment.payment_method || '—'}</span></div>
+                  <div className="aod-payment-row"><span>Transaction ID</span><span className="admin-muted t-small">{latestPayment.provider_payment_id || '—'}</span></div>
+                  <div className="aod-payment-row"><span>Verification</span><span>{latestPayment.signature_verified ? '✓ Verified' : 'Unverified'}</span></div>
+                  <div className="aod-payment-row"><span>Payment Date</span><span>{latestPayment.captured_at ? formatDate(latestPayment.captured_at) : '—'}</span></div>
+                </div>
+              ) : (
+                <p className="admin-muted t-small">No payment recorded yet.</p>
+              )}
+            </div>
           </div>
 
           <div className="admin-card" style={{ marginTop: 20 }}>
             <div className="admin-card-header"><h2 className="admin-card-title">Price Breakdown</h2></div>
-            <div className="aod-payment">
+            <div className="aod-payment admin-card-body">
               <div className="aod-payment-row"><span>Subtotal</span><span>{formatPrice((order.subtotal || 0) / 100)}</span></div>
               <div className="aod-payment-row"><span>Tax</span><span>{formatPrice((order.tax || 0) / 100)}</span></div>
               <div className="aod-payment-row"><span>Shipping</span><span>{formatPrice((order.shipping_cost || 0) / 100)}</span></div>
@@ -433,7 +441,7 @@ export function AdminOrderDetailPage() {
 
           <div className="admin-card" style={{ marginTop: 20 }}>
             <div className="admin-card-header"><h2 className="admin-card-title">Quick Actions</h2></div>
-            <div className="aod-actions-list">
+            <div className="aod-actions-list admin-card-body">
               {customerEmail && <Link className="btn btn-outline btn-sm" to={`/admin/customers?q=${encodeURIComponent(customerEmail)}`}>View Customer</Link>}
               <CopyBtn text={order.order_number || order.id} label="Copy Order ID" />
               <button className="btn btn-outline btn-sm" onClick={() => window.print()}>Print / Download Invoice</button>
@@ -445,8 +453,6 @@ export function AdminOrderDetailPage() {
       </div>
 
       <style>{`
-        .aod-max { max-width:1440px; margin:0 auto; }
-
         .aod-back-link { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--gr-2); margin-bottom:16px; transition:color .15s; }
         .aod-back-link:hover { color:var(--bk); }
         .aod-header-row { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
@@ -464,7 +470,7 @@ export function AdminOrderDetailPage() {
         .aod-summary-col:last-child { border-right:none; }
         .aod-summary-value { font-size:20px; font-weight:700; letter-spacing:-.01em; margin-top:4px; }
 
-        .aod-grid { display:grid; grid-template-columns:1fr 360px; gap:24px; align-items:start; }
+        .aod-grid { display:grid; grid-template-columns:minmax(0, 2fr) minmax(320px, 0.9fr); gap:24px; align-items:start; }
         .aod-side { display:flex; flex-direction:column; }
 
         .aod-products { display:flex; flex-direction:column; }
@@ -477,7 +483,7 @@ export function AdminOrderDetailPage() {
         .aod-product-col { text-align:right; white-space:nowrap; }
         .aod-grand-total span:last-child { color:#10b981; }
 
-        .aod-bottom-row { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:24px; align-items:start; }
+        .aod-bottom-row { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:24px; align-items:start; }
 
         .aod-vtimeline { display:flex; flex-direction:column; }
         .aod-vt-item { display:flex; gap:14px; position:relative; padding-bottom:24px; }
@@ -664,6 +670,7 @@ function AdminShipmentPanel({ orderId, shipment, onChange }) {
 
   return (
     <div className="admin-card aod-print-hide">
+      <div className="admin-card-body">
       <div className="admin-card-header" style={{ padding: 0, marginBottom: 18, border: 'none' }}>
         <h2 className="admin-card-title">Shipment</h2>
         {shipment.shipment_status === 'pending' && providers.length > 1 ? (
@@ -758,6 +765,7 @@ function AdminShipmentPanel({ orderId, shipment, onChange }) {
           <button className="btn btn-outline btn-sm" onClick={handleAddEvent}>Add</button>
         </div>
       </details>
+      </div>
 
       <style>{`
         .ash-timeline { display:flex; flex-direction:column; gap:14px; }
