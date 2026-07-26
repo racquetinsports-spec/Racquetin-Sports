@@ -7,14 +7,14 @@ import { AuthProvider } from './hooks/useAuth';
 // Admin is a completely separate layout — lazy-load the whole chunk
 const AdminLayout = lazy(() => import('./pages/admin/AdminDashboard').then(m => ({ default: m.AdminLayout })));
 const AdminHome   = lazy(() => import('./pages/admin/AdminDashboard').then(m => ({ default: m.AdminHome })));
-const AdminProductsPage     = lazy(() => import('./pages/admin/AdminPages').then(m => ({ default: m.AdminProductsPage })));
-const AdminCategoriesPage   = lazy(() => import('./pages/admin/AdminPages').then(m => ({ default: m.AdminCategoriesPage })));
-const AdminOrdersPage       = lazy(() => import('./pages/admin/AdminPages').then(m => ({ default: m.AdminOrdersPage })));
-const AdminOrderDetailPage  = lazy(() => import('./pages/admin/AdminPages').then(m => ({ default: m.AdminOrderDetailPage })));
-const AdminCustomersPage    = lazy(() => import('./pages/admin/AdminPages').then(m => ({ default: m.AdminCustomersPage })));
-const AdminNewsletterPage   = lazy(() => import('./pages/admin/AdminPages').then(m => ({ default: m.AdminNewsletterPage })));
-const AdminSettingsPage     = lazy(() => import('./pages/admin/AdminPages').then(m => ({ default: m.AdminSettingsPage })));
-const AdminContentPage      = lazy(() => import('./pages/admin/AdminPages').then(m => ({ default: m.AdminContentPage })));
+const AdminProductsPage     = lazy(() => import('./pages/admin/ProductsPage').then(m => ({ default: m.AdminProductsPage })));
+const AdminCategoriesPage   = lazy(() => import('./pages/admin/CategoriesPage').then(m => ({ default: m.AdminCategoriesPage })));
+const AdminOrdersPage       = lazy(() => import('./pages/admin/OrdersPage').then(m => ({ default: m.AdminOrdersPage })));
+const AdminOrderDetailPage  = lazy(() => import('./pages/admin/OrderDetailPage').then(m => ({ default: m.AdminOrderDetailPage })));
+const AdminCustomersPage    = lazy(() => import('./pages/admin/CustomersPage').then(m => ({ default: m.AdminCustomersPage })));
+const AdminNewsletterPage   = lazy(() => import('./pages/admin/NewsletterPage').then(m => ({ default: m.AdminNewsletterPage })));
+const AdminSettingsPage     = lazy(() => import('./pages/admin/SettingsPage').then(m => ({ default: m.AdminSettingsPage })));
+const AdminContentPage      = lazy(() => import('./pages/admin/ContentPage').then(m => ({ default: m.AdminContentPage })));
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

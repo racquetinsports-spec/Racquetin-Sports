@@ -8,7 +8,7 @@ import { Link, useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchDashboardStats, fetchRecentOrders } from '../../lib/api/admin';
 import { formatPrice } from '../../utils/format';
-import { AdminPagesStyles } from './AdminPages';
+import { AdminPagesStyles } from './shared/AdminUI';
 
 // ── Guard: redirect non-admins ────────────────────────────────────
 export function AdminGuard({ children }) {
