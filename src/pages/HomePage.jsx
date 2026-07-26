@@ -1199,7 +1199,17 @@ function CollectionsGrid() {
         .cc-cta { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; letter-spacing: .01em; color: var(--cr); margin-top: auto; }
         .cc-cta svg { transition: transform .3s cubic-bezier(.16,1,.3,1); }
         .cc-card:hover .cc-cta svg { transform: translateX(3px); }
-        @media(max-width:540px){ .cc-grid { grid-template-columns: 1fr 1fr; gap: 16px; } .cc-body { padding: 16px 16px 18px; } }
+        @media(max-width:540px){
+          .cc-grid { grid-template-columns: 1fr 1fr; gap: 16px; }
+          .cc-body { padding: 16px 16px 18px; }
+          /* Name + CTA only on mobile — description stays in the data/CMS
+             and still renders on tablet/desktop, this is presentation-only.
+             Every card hides it uniformly, so the .cc-desc min-height that
+             normally keeps card rows aligned is simply absent from every
+             card equally — row alignment isn't affected either way. */
+          .cc-desc { display: none; }
+          .cc-top { margin-bottom: 14px; }
+        }
         @media(max-width:380px){ .cc-grid { grid-template-columns: 1fr; } }
       `}</style>
     </section>
@@ -1296,7 +1306,7 @@ function TechStrip() {
       <div className="container">
         <div className="section-header">
           <div className="section-header-left">
-            <div className="eyebrow" style={{ color: 'var(--cr)' }}>Innovation</div>
+            <div className="eyebrow" style={{ color: '#7C9EE8' }}>Innovation</div>
             <h2 className="t-h2" style={{ color: '#fff' }}>Built Different</h2>
           </div>
 
@@ -1321,9 +1331,9 @@ function TechStrip() {
       <style>{`
         .tech-strip-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:rgba(255,255,255,.06); }
         .tech-strip-item { padding:32px 28px; border-top:1px solid rgba(255,255,255,.06); }
-        .tech-strip-num { font-size:11px; font-weight:700; letter-spacing:.18em; color:var(--cr); margin-bottom:16px; font-family:var(--fm); }
+        .tech-strip-num { font-size:11px; font-weight:700; letter-spacing:.18em; color:#7C9EE8; margin-bottom:16px; font-family:var(--fm); }
         .tech-strip-name { font-size:clamp(12px,1vw,14px); font-weight:700; text-transform:uppercase; letter-spacing:-.01em; margin-bottom:10px; }
-        .tech-strip-desc { font-size:clamp(12px,0.95vw,13.5px); color:rgba(255,255,255,.4); line-height:1.65; }
+        .tech-strip-desc { font-size:clamp(12px,0.95vw,13.5px); color:rgba(255,255,255,.68); line-height:1.65; }
         @media(max-width:860px){ .tech-strip-grid{grid-template-columns:1fr 1fr;} }
         @media(max-width:540px){ .tech-strip-grid{grid-template-columns:1fr;} }
       `}</style>

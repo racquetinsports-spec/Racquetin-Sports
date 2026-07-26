@@ -295,7 +295,16 @@ ul  { list-style: none; }
   .section-header { flex-direction: column; align-items: flex-start; }
 }
 @media (max-width: 540px) {
+  .container { padding: 0 18px; }
+  .container-sm { padding: 0 18px; }
   .grid-4 { grid-template-columns: 1fr 1fr; gap: 12px; }
   .grid-3 { grid-template-columns: 1fr 1fr; gap: 12px; }
   .grid-2 { grid-template-columns: 1fr; }
+}
+/* Genuinely small phones (iPhone SE and similar, ~375px and below) —
+   18px starts to feel tight relative to the screen at this size, so
+   this tier drops to the 16px floor called for as a minimum. */
+@media (max-width: 400px) {
+  .container { padding: 0 16px; }
+  .container-sm { padding: 0 16px; }
 }
