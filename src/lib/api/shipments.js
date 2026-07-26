@@ -92,7 +92,7 @@ export async function createShipment(orderId, fields = {}) {
     .select().single();
 
   await logShipmentEvent(shipment.id, 'pending', existing ? `Provider set to ${provider.name}.` : 'Shipment created.');
-  return { data: updated || shipment, error: null };
+  return { data: updated || shipment, error: null, warning: result.warning || null };
 }
 
 export async function updateShipment(id, fields) {

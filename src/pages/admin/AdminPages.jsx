@@ -1167,6 +1167,17 @@ function AdminShipmentPanel({ orderId }) {
   const [eventForm, setEventForm] = useState({ description: '', location: '' });
   const [providers, setProviders] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState('manual');
+  // Surfaces two distinct things a provider call can produce beyond a
+  // clean success: `providerWarning` — the shipment WAS created but
+  // something non-fatal needs attention (e.g. Shiprocket order created
+  // but courier auto-assignment failed); `actionError` — the call
+  // failed outright (e.g. Shiprocket unreachable, bad secrets). Without
+  // this, both used to fail silently — courierAssignError was returned
+  // by the Edge Function but never read anywhere, and a thrown error
+  // left the button stuck on "saving" forever with setSaving(false)
+  // never reached.
+  const [providerWarning, setProviderWarning] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
   const load = useCallback(() => {
     fetchShipmentByOrderId(orderId).then(({ data }) => {
@@ -1193,9 +1204,18 @@ function AdminShipmentPanel({ orderId }) {
 
   async function handleCreate() {
     setSaving(true);
-    await createShipment(orderId, { provider: selectedProvider });
-    setSaving(false);
-    load();
+    setProviderWarning(null);
+    setActionError(null);
+    try {
+      const { warning, error } = await createShipment(orderId, { provider: selectedProvider });
+      if (error) setActionError(error.message || 'Could not create shipment.');
+      else if (warning) setProviderWarning(warning);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not create shipment.');
+    } finally {
+      setSaving(false);
+      load();
+    }
   }
 
   async function handleSaveDetails() {
@@ -1219,7 +1239,9 @@ function AdminShipmentPanel({ orderId }) {
 
   async function handleCancel() {
     if (!window.confirm('Cancel this shipment?')) return;
-    await cancelShipment(shipment.id);
+    setActionError(null);
+    const { error } = await cancelShipment(shipment.id);
+    if (error) setActionError(error.message || 'Could not cancel shipment.');
     load();
   }
 
@@ -1233,9 +1255,18 @@ function AdminShipmentPanel({ orderId }) {
   async function handleSwitchProvider(newSlug) {
     if (newSlug === shipment.provider) return;
     setSaving(true);
-    await createShipment(orderId, { provider: newSlug });
-    setSaving(false);
-    load();
+    setProviderWarning(null);
+    setActionError(null);
+    try {
+      const { warning, error } = await createShipment(orderId, { provider: newSlug });
+      if (error) setActionError(error.message || 'Could not switch provider.');
+      else if (warning) setProviderWarning(warning);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not switch provider.');
+    } finally {
+      setSaving(false);
+      load();
+    }
   }
 
   if (loading) return <div className="admin-card" style={{ marginTop: 20, padding: 24 }}><p className="admin-muted">Loading shipment…</p></div>;
@@ -1290,6 +1321,17 @@ function AdminShipmentPanel({ orderId }) {
           <StatusPill value={shipment.shipment_status} colors={SHIPMENT_STATUS_COLORS} />
         </div>
       </div>
+
+      {providerWarning && (
+        <div style={{ padding: '10px 14px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 'var(--r-sm)', marginBottom: 16, fontSize: 13, color: '#9A3412' }}>
+          <strong>Shipment created, but:</strong> {providerWarning}
+        </div>
+      )}
+      {actionError && (
+        <div style={{ padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 'var(--r-sm)', marginBottom: 16, fontSize: 13, color: '#991B1B' }}>
+          {actionError}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
         <button className="btn btn-outline btn-sm" onClick={() => handleStatus('packed')} disabled={shipment.shipment_status === 'cancelled'}>Mark Packed</button>

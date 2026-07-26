@@ -43,6 +43,12 @@ export const shiprocketProvider = {
       labelUrl: undefined, // not fetched at creation time — see README note in the Edge Function about generate-label as a follow-up action
       estimatedDelivery: undefined,
       providerOrderId: result.shiprocketOrderId != null ? String(result.shiprocketOrderId) : undefined,
+      // Order creation can succeed while courier auto-assignment still
+      // fails (see the Edge Function's autoAssignCourier) — that's not
+      // a thrown error (the shipment IS real, just without a courier
+      // yet), so it's surfaced as a warning instead, for the admin UI
+      // to display rather than silently dropping.
+      warning: result.courierAssignError || undefined,
       raw: result,
     };
   },
