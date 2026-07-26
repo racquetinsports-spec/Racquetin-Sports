@@ -37,7 +37,11 @@ export async function fetchMyShipments(orderIds) {
 // ── Admin actions ─────────────────────────────────────────────────
 
 export async function createShipment(orderId, fields = {}) {
-  const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single();
+  const { data: order } = await supabase
+    .from('orders')
+    .select('*, order_items(*)')
+    .eq('id', orderId)
+    .single();
   const provider = getProvider(fields.provider || 'manual');
 
   const { data: shipment, error } = await supabase
@@ -58,6 +62,11 @@ export async function createShipment(orderId, fields = {}) {
       courier_name: result.courierName ?? shipment.courier_name,
       label_url: result.labelUrl ?? shipment.label_url,
       estimated_delivery: result.estimatedDelivery ?? shipment.estimated_delivery,
+      // Provider's own order/shipment id (e.g. Shiprocket's internal
+      // numeric order_id) — not the same as tracking_number (the AWB).
+      // Needed later so cancelShipment() can tell the provider WHICH
+      // of its orders to cancel.
+      provider_order_id: result.providerOrderId ?? shipment.provider_order_id,
     })
     .eq('id', shipment.id)
     .select().single();
@@ -93,6 +102,24 @@ export async function markShipmentStatus(id, status, { description, location } =
 }
 
 export async function cancelShipment(id, reason) {
+  // Previously this only ever updated our own shipment_status — fine
+  // for 'manual' (nothing external to cancel), but for a real courier
+  // it would silently leave the order live on their side while our own
+  // records said "cancelled". Cancel with the provider FIRST; only
+  // mark our own status once that's confirmed (or skip straight to it
+  // for 'manual', which has nothing to do here).
+  const { data: shipment, error: fetchError } = await supabase.from('shipments').select('*').eq('id', id).single();
+  if (fetchError || !shipment) return { data: null, error: fetchError || { message: 'Shipment not found' } };
+
+  if (shipment.provider && shipment.provider !== 'manual') {
+    const provider = getProvider(shipment.provider);
+    try {
+      await provider.cancelShipment(shipment);
+    } catch (err) {
+      return { data: null, error: { message: err instanceof Error ? err.message : 'Provider cancellation failed' } };
+    }
+  }
+
   return markShipmentStatus(id, 'cancelled', { description: reason || 'Shipment cancelled.' });
 }
 

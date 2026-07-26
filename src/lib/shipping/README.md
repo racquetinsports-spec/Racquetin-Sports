@@ -25,6 +25,12 @@ this interface, never to a specific courier's API directly.
     courierName?: string,
     labelUrl?: string,
     estimatedDelivery?: string, // ISO date
+    providerOrderId?: string,   // the provider's OWN order/shipment id
+                                 // (e.g. Shiprocket's internal numeric
+                                 // order_id) — distinct from
+                                 // trackingNumber (the AWB); needed so
+                                 // cancelShipment() knows which of the
+                                 // provider's orders to cancel later
     raw?: object,               // provider's raw response, for debugging
   }>,
 
@@ -43,7 +49,11 @@ this interface, never to a specific courier's API directly.
 
 ## Adding a real provider later
 
-1. Create `shiprocketProvider.js` (or similar) implementing the shape above.
+`shiprocketProvider.js` (see `supabase/functions/shiprocket-shipment/index.ts`
+for the actual API calls) is a complete example of the pattern below —
+worth reading before adding another one.
+
+1. Create `xProvider.js` implementing the shape above.
    Any API keys/secrets it needs belong in a Supabase Edge Function
    (never in frontend code or `VITE_`-prefixed env vars) — the same
    pattern already used for Razorpay in `supabase/functions/`.

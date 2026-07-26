@@ -22,7 +22,7 @@ import {
 } from '../../lib/api/content';
 import { listMedia, uploadMedia, replaceMedia, deleteMedia } from '../../lib/api/media';
 import {
-  fetchShipmentByOrderId, createShipment, updateShipment, markShipmentStatus, cancelShipment, logShipmentEvent,
+  fetchShipmentByOrderId, createShipment, updateShipment, markShipmentStatus, cancelShipment, logShipmentEvent, fetchDeliveryProviders,
 } from '../../lib/api/shipments';
 import {
   fetchVariantsForProduct, createVariant, updateVariant, deleteVariant,
@@ -1165,6 +1165,8 @@ function AdminShipmentPanel({ orderId }) {
   const [form, setForm] = useState({ courier_name: '', tracking_number: '', tracking_url: '', estimated_delivery: '', label_url: '', notes: '' });
   const [saving, setSaving] = useState(false);
   const [eventForm, setEventForm] = useState({ description: '', location: '' });
+  const [providers, setProviders] = useState([]);
+  const [selectedProvider, setSelectedProvider] = useState('manual');
 
   const load = useCallback(() => {
     fetchShipmentByOrderId(orderId).then(({ data }) => {
@@ -1181,10 +1183,17 @@ function AdminShipmentPanel({ orderId }) {
   }, [orderId]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    fetchDeliveryProviders().then(({ data }) => {
+      const active = (data || []).filter(p => p.is_active);
+      setProviders(active);
+      if (active.length) setSelectedProvider(active.find(p => p.slug === 'manual')?.slug || active[0].slug);
+    });
+  }, []);
 
   async function handleCreate() {
     setSaving(true);
-    await createShipment(orderId, {});
+    await createShipment(orderId, { provider: selectedProvider });
     setSaving(false);
     load();
   }
@@ -1227,7 +1236,19 @@ function AdminShipmentPanel({ orderId }) {
     return (
       <div className="admin-card" style={{ marginTop: 20, padding: 24, textAlign: 'center' }}>
         <p className="admin-muted" style={{ marginBottom: 12 }}>No shipment created for this order yet.</p>
-        <button className="btn btn-primary btn-sm" onClick={handleCreate} disabled={saving}>{saving ? 'Creating…' : '+ Create Shipment'}</button>
+        {providers.length > 1 && (
+          <select
+            className="select"
+            style={{ marginBottom: 12, maxWidth: 240, marginLeft: 'auto', marginRight: 'auto' }}
+            value={selectedProvider}
+            onChange={e => setSelectedProvider(e.target.value)}
+          >
+            {providers.map(p => <option key={p.slug} value={p.slug}>{p.name}</option>)}
+          </select>
+        )}
+        <div>
+          <button className="btn btn-primary btn-sm" onClick={handleCreate} disabled={saving}>{saving ? 'Creating…' : '+ Create Shipment'}</button>
+        </div>
       </div>
     );
   }
@@ -1236,7 +1257,10 @@ function AdminShipmentPanel({ orderId }) {
     <div className="admin-card" style={{ marginTop: 20, padding: 24 }}>
       <div className="admin-card-header" style={{ padding: 0, marginBottom: 18, border: 'none' }}>
         <h2 className="admin-card-title">Shipment</h2>
-        <StatusPill value={shipment.shipment_status} colors={SHIPMENT_STATUS_COLORS} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span className="t-small admin-muted" style={{ textTransform: 'capitalize' }}>{shipment.provider}</span>
+          <StatusPill value={shipment.shipment_status} colors={SHIPMENT_STATUS_COLORS} />
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
