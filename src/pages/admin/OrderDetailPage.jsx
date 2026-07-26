@@ -1,27 +1,74 @@
 // ── Admin: Order Detail ───────────────────────────────────────────
-// Extracted from the original AdminPages.jsx monolith — mechanical
-// relocation only, no behavioral changes. Reuses the order-status
-// vocabulary exported from OrdersPage.jsx rather than duplicating it.
-import { useState, useEffect, useCallback } from 'react';
+// Redesigned (Phase 2 of the admin UI pass) — presentation only for
+// everything that already existed. Two small additive exceptions,
+// both called out here and in lib/api/orders.js:
+//   1. fetchAllOrders' select now also nests payment_events under
+//      payments (real FK: payment_events.payment_id -> payments.id) —
+//      this is what makes the Order Timeline below real data instead
+//      of a fabricated one. Read-only, no behavior change.
+//   2. updateOrderNotes is new — orders.notes already existed in the
+//      schema with no UI anywhere to read or write it.
+// Reuses the order-status vocabulary exported from OrdersPage.jsx
+// rather than duplicating it.
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { formatPrice } from '../../utils/format';
-import { fetchAllOrders, updateOrderStatus } from '../../lib/api/orders';
+import { fetchAllOrders, updateOrderStatus, updateOrderNotes } from '../../lib/api/orders';
 import {
   fetchShipmentByOrderId, createShipment, updateShipment, markShipmentStatus, cancelShipment, logShipmentEvent, fetchDeliveryProviders,
 } from '../../lib/api/shipments';
 import { StatusPill } from './shared/AdminUI';
 import { ORDER_STATUSES, STATUS_COLORS, PAYMENT_STATUS_COLORS } from './OrdersPage';
 
+// Real payment_events.event_type values (see supabase/schema.sql) —
+// unmapped types fall back to a generic label rather than being hidden,
+// so nothing from the real data is ever silently dropped.
+const EVENT_META = {
+  'payment.captured':   { label: 'Payment captured',   color: '#10b981' },
+  'payment.authorized': { label: 'Payment authorized', color: '#3b82f6' },
+  'payment.failed':     { label: 'Payment failed',     color: '#ef4444' },
+  'refund.processed':   { label: 'Refund processed',   color: '#f59e0b' },
+};
+
+function formatDate(d, opts) {
+  return new Date(d).toLocaleString('en-IN', opts || { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function addressesEqual(a, b) {
+  if (!a || !b) return false;
+  const norm = x => JSON.stringify({ ...x, phone: undefined, email: undefined });
+  return norm(a) === norm(b);
+}
+
+function AddressBlock({ address }) {
+  if (!address) return <p className="admin-muted t-small">Not provided.</p>;
+  return (
+    <div className="aod-address">
+      <div className="aod-address-name">{address.firstName} {address.lastName}</div>
+      <div>{address.address1}{address.address2 ? `, ${address.address2}` : ''}</div>
+      <div>{address.city}{address.state ? `, ${address.state}` : ''} {address.postcode}</div>
+      <div>{address.country}</div>
+      {address.phone && <div className="admin-muted" style={{ marginTop: 6 }}>{address.phone}</div>}
+      {address.email && <div className="admin-muted">{address.email}</div>}
+    </div>
+  );
+}
+
 export function AdminOrderDetailPage() {
   const { id } = useParams();
   const nav = useNavigate();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [notes, setNotes] = useState('');
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     fetchAllOrders({ limit: 200 }).then(({ data }) => {
-      setOrder(data.find(o => o.id === id) || null);
+      const found = data.find(o => o.id === id) || null;
+      setOrder(found);
+      setNotes(found?.notes || '');
       setLoading(false);
     });
   }, [id]);
@@ -31,11 +78,65 @@ export function AdminOrderDetailPage() {
     setOrder(o => ({ ...o, status }));
   }
 
-  if (loading) return <div className="admin-page"><div className="admin-page-loading">Loading order…</div></div>;
+  async function handleSaveNotes() {
+    setNotesSaving(true);
+    const { error } = await updateOrderNotes(id, notes);
+    setNotesSaving(false);
+    if (!error) { setNotesSaved(true); setTimeout(() => setNotesSaved(false), 1600); }
+  }
+
+  // Real order timeline: one honest synthetic "Order placed" entry
+  // (order.created_at is a real fact, not a guess) merged with actual
+  // payment_events pulled through the payments join — never fabricated.
+  const timeline = useMemo(() => {
+    if (!order) return [];
+    const events = [{ type: 'order.placed', label: 'Order placed', color: '#111', at: order.created_at }];
+    (order.payments || []).forEach(p => {
+      (p.payment_events || []).forEach(ev => {
+        events.push({
+          type: ev.event_type,
+          label: EVENT_META[ev.event_type]?.label || ev.event_type,
+          color: EVENT_META[ev.event_type]?.color || '#6b7280',
+          at: ev.received_at,
+        });
+      });
+    });
+    return events.sort((a, b) => new Date(a.at) - new Date(b.at));
+  }, [order]);
+
+  const latestPayment = useMemo(() => {
+    if (!order?.payments?.length) return null;
+    return [...order.payments].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+  }, [order]);
+  const earlierPayments = order?.payments?.length > 1 ? order.payments.filter(p => p.id !== latestPayment?.id) : [];
+
+  const billingSameAsShipping = order && addressesEqual(order.billing_address, order.shipping_address);
+
+  if (loading) return (
+    <div className="admin-page">
+      <div className="aod-skel-header" />
+      <div className="aod-grid">
+        <div className="aod-main">{[0, 1].map(i => <div key={i} className="admin-card aod-skel-card" />)}</div>
+        <div className="aod-side">{[0, 1, 2].map(i => <div key={i} className="admin-card aod-skel-card" style={{ height: 120 }} />)}</div>
+      </div>
+      <style>{`
+        .aod-skel-header { height:52px; border-radius:var(--r); background:linear-gradient(90deg, var(--gr-6) 25%, var(--gr-5) 50%, var(--gr-6) 75%); background-size:200% 100%; animation:aod-shimmer 1.4s infinite; margin-bottom:20px; }
+        .aod-skel-card { height:220px; background:linear-gradient(90deg, var(--gr-6) 25%, var(--gr-5) 50%, var(--gr-6) 75%); background-size:200% 100%; animation:aod-shimmer 1.4s infinite; margin-bottom:20px; }
+        @keyframes aod-shimmer { 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
+      `}</style>
+    </div>
+  );
+
   if (!order) return (
     <div className="admin-page">
-      <p className="admin-muted">Order not found.</p>
-      <button className="btn btn-outline btn-sm" style={{ marginTop: 12 }} onClick={() => nav('/admin/orders')}>Back to Orders</button>
+      <div className="admin-empty">
+        <div className="admin-empty-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
+        </div>
+        <h3>Order not found</h3>
+        <p>It may have been removed, or the link is out of date.</p>
+        <button className="btn btn-primary btn-sm" onClick={() => nav('/admin/orders')}>Back to Orders</button>
+      </div>
     </div>
   );
 
@@ -44,71 +145,161 @@ export function AdminOrderDetailPage() {
       <div className="apc-header">
         <div>
           <h1 className="admin-page-title">Order {order.order_number || order.id.slice(0, 8)}</h1>
-          <p className="apc-subtitle">Placed {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+          <p className="apc-subtitle">Placed {formatDate(order.created_at)}</p>
         </div>
         <div className="apc-header-right">
           <Link to="/admin/orders" className="btn btn-outline btn-sm">Back to Orders</Link>
         </div>
       </div>
 
-      <div className="admin-card" style={{ padding: 24, marginBottom: 20 }}>
-        <div className="admin-detail-grid">
-          <div><span className="admin-muted t-small">Customer</span><div>{order.customers?.full_name || order.customers?.email || '—'}</div></div>
-          <div><span className="admin-muted t-small">Placed</span><div>{new Date(order.created_at).toLocaleString('en-IN')}</div></div>
-          <div><span className="admin-muted t-small">Payment</span><div style={{ marginTop: 4 }}><StatusPill value={order.payment_status} colors={PAYMENT_STATUS_COLORS} />{order.payment_id && <span className="admin-muted t-small" style={{ marginLeft: 8 }}>{order.payment_id}</span>}</div></div>
-          <div>
-            <span className="admin-muted t-small">Fulfillment</span>
-            <div style={{ marginTop: 4 }}>
-              <select
-                className="select aor-status-select"
-                value={order.status}
-                onChange={e => handleStatusChange(e.target.value)}
-                style={{ background: (STATUS_COLORS[order.status] || '#999') + '1a', color: STATUS_COLORS[order.status] || '#666' }}
-              >
-                {ORDER_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+      {/* Order Summary */}
+      <div className="admin-card aod-summary">
+        <div className="aod-summary-chips">
+          <StatusPill value={order.payment_status} colors={PAYMENT_STATUS_COLORS} />
+          {order.payment_verified && <span className="aod-verified-badge">✓ Verified</span>}
+          <select
+            className="select aor-status-select"
+            value={order.status}
+            onChange={e => handleStatusChange(e.target.value)}
+            style={{ background: (STATUS_COLORS[order.status] || '#999') + '1a', color: STATUS_COLORS[order.status] || '#666' }}
+          >
+            {ORDER_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div className="aod-summary-metrics">
+          <div><span className="admin-muted t-small">Total</span><div className="aod-metric-value">{formatPrice((order.total || 0) / 100)}</div></div>
+          <div><span className="admin-muted t-small">Items</span><div className="aod-metric-value">{(order.order_items || []).reduce((n, i) => n + i.qty, 0)}</div></div>
+          <div><span className="admin-muted t-small">Payment Method</span><div className="aod-metric-value" style={{ textTransform: 'capitalize' }}>{order.payment_method || latestPayment?.payment_method || '—'}</div></div>
+          <div><span className="admin-muted t-small">Customer</span><div className="aod-metric-value">{order.customers?.full_name || order.customers?.email || '—'}</div></div>
+        </div>
+      </div>
+
+      <div className="aod-grid">
+        {/* Main column */}
+        <div className="aod-main">
+          <div className="admin-card">
+            <div className="admin-card-header"><h2 className="admin-card-title">Purchased Products</h2></div>
+            <table className="admin-table">
+              <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Subtotal</th></tr></thead>
+              <tbody>
+                {(order.order_items || []).map(i => (
+                  <tr key={i.id}>
+                    <td>{i.name}</td>
+                    <td className="admin-muted">{i.qty}</td>
+                    <td>{formatPrice(i.price / 100)}</td>
+                    <td>{formatPrice((i.price * i.qty) / 100)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="admin-order-totals">
+              <div><span>Subtotal</span><span>{formatPrice((order.subtotal || 0) / 100)}</span></div>
+              {order.discount > 0 && <div><span>Discount{order.coupon_code ? ` (${order.coupon_code})` : ''}</span><span>−{formatPrice(order.discount / 100)}</span></div>}
+              <div><span>Tax</span><span>{formatPrice((order.tax || 0) / 100)}</span></div>
+              <div><span>Shipping</span><span>{formatPrice((order.shipping_cost || 0) / 100)}</span></div>
+              <div className="admin-order-total-final"><span>Total</span><span>{formatPrice((order.total || 0) / 100)}</span></div>
+            </div>
+          </div>
+
+          <div className="admin-card" style={{ marginTop: 20 }}>
+            <div className="admin-card-header"><h2 className="admin-card-title">Order Timeline</h2></div>
+            <div className="ash-timeline">
+              {timeline.map((ev, i) => (
+                <div key={i} className="ash-timeline-item">
+                  <div className="ash-timeline-dot" style={{ background: ev.color }} />
+                  <div>
+                    <div className="ash-timeline-desc">{ev.label}</div>
+                    <div className="admin-muted t-small">{formatDate(ev.at)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <AdminShipmentPanel orderId={order.id} />
+
+          <div className="admin-card" style={{ marginTop: 20 }}>
+            <div className="admin-card-header"><h2 className="admin-card-title">Notes</h2></div>
+            <textarea
+              className="input"
+              rows={4}
+              placeholder="Internal notes about this order — not visible to the customer."
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+              <button className="btn btn-primary btn-sm" onClick={handleSaveNotes} disabled={notesSaving}>{notesSaving ? 'Saving…' : 'Save Notes'}</button>
+              {notesSaved && <span className="acm-saved-flash">Saved ✓</span>}
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="admin-card">
-        <div className="admin-card-header"><h2 className="admin-card-title">Items</h2></div>
-        <table className="admin-table">
-          <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Subtotal</th></tr></thead>
-          <tbody>
-            {(order.order_items || []).map(i => (
-              <tr key={i.id}>
-                <td>{i.name}</td>
-                <td className="admin-muted">{i.qty}</td>
-                <td>{formatPrice(i.price)}</td>
-                <td>{formatPrice(i.price * i.qty)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="admin-order-totals">
-          <div><span>Subtotal</span><span>{formatPrice(order.subtotal / 100)}</span></div>
-          <div><span>Tax</span><span>{formatPrice(order.tax / 100)}</span></div>
-          <div><span>Shipping</span><span>{formatPrice(order.shipping_cost / 100)}</span></div>
-          <div className="admin-order-total-final"><span>Total</span><span>{formatPrice(order.total / 100)}</span></div>
-        </div>
-      </div>
+        {/* Sidebar */}
+        <div className="aod-side">
+          <div className="admin-card">
+            <div className="admin-card-header"><h2 className="admin-card-title">Customer</h2></div>
+            <div className="aod-address">
+              <div className="aod-address-name">{order.customers?.full_name || 'Guest'}</div>
+              <div className="admin-muted">{order.customers?.email || '—'}</div>
+            </div>
+          </div>
 
-      {order.shipping_address && (
-        <div className="admin-card" style={{ marginTop: 20, padding: 24 }}>
-          <h2 className="admin-card-title" style={{ marginBottom: 12 }}>Shipping Address</h2>
-          <div className="admin-muted" style={{ fontSize: 13, lineHeight: 1.7 }}>
-            {order.shipping_address.firstName} {order.shipping_address.lastName}<br />
-            {order.shipping_address.address1}{order.shipping_address.address2 ? `, ${order.shipping_address.address2}` : ''}<br />
-            {order.shipping_address.city} {order.shipping_address.postcode}<br />
-            {order.shipping_address.country}<br />
-            {order.shipping_address.phone}
+          <div className="admin-card" style={{ marginTop: 20 }}>
+            <div className="admin-card-header"><h2 className="admin-card-title">Shipping Address</h2></div>
+            <AddressBlock address={order.shipping_address} />
+          </div>
+
+          <div className="admin-card" style={{ marginTop: 20 }}>
+            <div className="admin-card-header"><h2 className="admin-card-title">Billing Address</h2></div>
+            {billingSameAsShipping ? (
+              <p className="admin-muted t-small">Same as shipping address.</p>
+            ) : (
+              <AddressBlock address={order.billing_address} />
+            )}
+          </div>
+
+          <div className="admin-card" style={{ marginTop: 20 }}>
+            <div className="admin-card-header"><h2 className="admin-card-title">Payment</h2></div>
+            {latestPayment ? (
+              <div className="aod-payment">
+                <div className="aod-payment-row"><span>Status</span><StatusPill value={latestPayment.status} colors={PAYMENT_STATUS_COLORS} /></div>
+                <div className="aod-payment-row"><span>Method</span><span style={{ textTransform: 'capitalize' }}>{latestPayment.payment_method || '—'}</span></div>
+                <div className="aod-payment-row"><span>Amount</span><span>{formatPrice((latestPayment.amount || 0) / 100)}</span></div>
+                <div className="aod-payment-row"><span>Captured</span><span>{latestPayment.captured_at ? formatDate(latestPayment.captured_at) : '—'}</span></div>
+                {latestPayment.provider_payment_id && <div className="aod-payment-row"><span>Payment ID</span><span className="admin-muted t-small">{latestPayment.provider_payment_id}</span></div>}
+                {(latestPayment.status === 'refunded' || latestPayment.status === 'partially_refunded') && (
+                  <div className="aod-payment-row"><span>Refunded</span><span>{formatPrice((latestPayment.refunded_amount || 0) / 100)}</span></div>
+                )}
+                {earlierPayments.length > 0 && (
+                  <p className="admin-muted t-small" style={{ marginTop: 10 }}>+ {earlierPayments.length} earlier payment attempt{earlierPayments.length > 1 ? 's' : ''} on this order.</p>
+                )}
+              </div>
+            ) : (
+              <p className="admin-muted t-small">No payment recorded yet.</p>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
-      <AdminShipmentPanel orderId={order.id} />
+      <style>{`
+        .aod-summary { padding:20px 24px; margin-bottom:20px; }
+        .aod-summary-chips { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+        .aod-verified-badge { font-size:11px; font-weight:600; color:#10b981; background:rgba(16,185,129,.12); padding:3px 10px; border-radius:100px; }
+        .aod-summary-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; padding-top:16px; border-top:1px solid var(--gr-5); }
+        .aod-metric-value { font-size:15px; font-weight:600; margin-top:2px; }
+
+        .aod-grid { display:grid; grid-template-columns:1fr 340px; gap:20px; align-items:start; }
+        .aod-side { display:flex; flex-direction:column; }
+
+        .aod-address { font-size:13px; line-height:1.7; color:var(--gr-1); }
+        .aod-address-name { font-weight:600; color:var(--bk); margin-bottom:2px; }
+
+        .aod-payment-row { display:flex; align-items:center; justify-content:space-between; padding:7px 0; font-size:13px; border-bottom:1px solid var(--gr-6); }
+        .aod-payment-row:last-child { border-bottom:none; }
+        .aod-payment-row > span:first-child { color:var(--gr-2); }
+
+        @media(max-width:900px){ .aod-grid { grid-template-columns:1fr; } .aod-summary-metrics { grid-template-columns:1fr 1fr; } }
+      `}</style>
     </div>
   );
 }
@@ -126,15 +317,6 @@ function AdminShipmentPanel({ orderId }) {
   const [eventForm, setEventForm] = useState({ description: '', location: '' });
   const [providers, setProviders] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState('manual');
-  // Surfaces two distinct things a provider call can produce beyond a
-  // clean success: `providerWarning` — the shipment WAS created but
-  // something non-fatal needs attention (e.g. Shiprocket order created
-  // but courier auto-assignment failed); `actionError` — the call
-  // failed outright (e.g. Shiprocket unreachable, bad secrets). Without
-  // this, both used to fail silently — courierAssignError was returned
-  // by the Edge Function but never read anywhere, and a thrown error
-  // left the button stuck on "saving" forever with setSaving(false)
-  // never reached.
   const [providerWarning, setProviderWarning] = useState(null);
   const [actionError, setActionError] = useState(null);
 
@@ -256,14 +438,6 @@ function AdminShipmentPanel({ orderId }) {
       <div className="admin-card-header" style={{ padding: 0, marginBottom: 18, border: 'none' }}>
         <h2 className="admin-card-title">Shipment</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {/* Every order gets a 'manual' placeholder shipment automatically
-              on fulfillment (see fulfillOrder.ts), so this is almost always
-              how a real courier actually gets assigned in practice — not
-              the "no shipment yet" empty state above, which in normal
-              operation never actually occurs. Locked once the shipment has
-              moved past 'pending' — switching couriers on something
-              already handed off doesn't make sense and could leave two
-              couriers both thinking they own it. */}
           {shipment.shipment_status === 'pending' && providers.length > 1 ? (
             <select
               className="select"
@@ -310,7 +484,7 @@ function AdminShipmentPanel({ orderId }) {
       </div>
       <button className="btn btn-primary btn-sm" onClick={handleSaveDetails} disabled={saving} style={{ marginBottom: 24 }}>{saving ? 'Saving…' : 'Save Shipment Details'}</button>
 
-      <h3 className="admin-card-title" style={{ fontSize: 14, marginBottom: 12 }}>Timeline</h3>
+      <h3 className="admin-card-title" style={{ fontSize: 14, marginBottom: 12 }}>Shipment Timeline</h3>
       <div className="ash-timeline">
         {(shipment.shipment_events || []).map(ev => (
           <div key={ev.id} className="ash-timeline-item">

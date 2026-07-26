@@ -280,6 +280,15 @@ export function AdminPagesStyles() {
       .acm-replace-btn { cursor:pointer; text-align:center; }
       .acm-upload-preview { background:var(--gr-6); border-radius:var(--r); overflow:hidden; display:flex; align-items:center; justify-content:center; max-height:320px; }
       .acm-upload-preview img { width:100%; max-height:320px; object-fit:contain; display:block; }
+
+      /* Shared empty-state pattern — icon + headline + description +
+         primary action — used across multiple admin pages (Categories,
+         Order Detail, and any future page needing one), so it lives
+         here rather than being duplicated per-page. */
+      .admin-empty { text-align:center; padding:64px 24px; background:var(--wh); border:1px solid var(--gr-5); border-radius:var(--r); }
+      .admin-empty-icon { width:56px; height:56px; margin:0 auto 16px; display:flex; align-items:center; justify-content:center; background:var(--gr-6); border-radius:50%; color:var(--gr-3); }
+      .admin-empty h3 { font-size:16px; font-weight:600; margin-bottom:6px; }
+      .admin-empty p { font-size:13px; color:var(--gr-2); max-width:340px; margin:0 auto 20px; line-height:1.5; }
     `}</style>
   );
 }

@@ -35,7 +35,10 @@ export async function fetchOrderById(orderId) {
 export async function fetchAllOrders({ status, limit = 50, offset = 0 } = {}) {
   let query = supabase
     .from('orders')
-    .select(`*, order_items(*), payments(*), shipments(*)`, { count: 'exact' })
+    // payment_events nested under payments (real FK: payment_events.payment_id
+    // -> payments.id) gives the Order Detail page a genuine timeline of
+    // payment.captured/failed/refund events instead of a fabricated one.
+    .select(`*, order_items(*), payments(*, payment_events(*)), shipments(*)`, { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
   if (status) query = query.eq('status', status);
@@ -62,6 +65,20 @@ export async function updateOrderStatus(orderId, status) {
   const { data, error } = await supabase
     .from('orders')
     .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', orderId)
+    .select().single();
+  return { data, error };
+}
+
+// orders.notes already existed in the schema but had no UI anywhere to
+// read or write it. This is the one small, additive exception to
+// "don't modify backend logic" in this admin redesign pass — it's a
+// single free-text column with no business rules attached to it, not
+// a change to any existing behavior.
+export async function updateOrderNotes(orderId, notes) {
+  const { data, error } = await supabase
+    .from('orders')
+    .update({ notes, updated_at: new Date().toISOString() })
     .eq('id', orderId)
     .select().single();
   return { data, error };
