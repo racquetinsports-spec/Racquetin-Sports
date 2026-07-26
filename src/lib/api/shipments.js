@@ -44,11 +44,31 @@ export async function createShipment(orderId, fields = {}) {
     .single();
   const provider = getProvider(fields.provider || 'manual');
 
-  const { data: shipment, error } = await supabase
-    .from('shipments')
-    .insert([{ order_id: orderId, provider: provider.slug, shipment_status: 'pending', ...fields }])
-    .select().single();
-  if (error) return { data: null, error };
+  // A 'manual' placeholder shipment already exists for every order by
+  // the time an admin looks at it — created automatically the moment
+  // the order is fulfilled (see fulfillOrder.ts step 5, "Order
+  // confirmed — preparing for dispatch"), so customers see something
+  // on /account immediately. That means this function is really
+  // "assign/switch the provider on the existing shipment" in practice,
+  // not "create a new row" — blindly inserting here (as this used to
+  // do) would silently create a second shipments row for the same
+  // order, which nothing in the schema was preventing.
+  const { data: existing } = await supabase.from('shipments').select('*').eq('order_id', orderId).maybeSingle();
+
+  let shipment, upsertError;
+  if (existing) {
+    ({ data: shipment, error: upsertError } = await supabase
+      .from('shipments')
+      .update({ provider: provider.slug })
+      .eq('id', existing.id)
+      .select().single());
+  } else {
+    ({ data: shipment, error: upsertError } = await supabase
+      .from('shipments')
+      .insert([{ order_id: orderId, provider: provider.slug, shipment_status: 'pending', ...fields }])
+      .select().single());
+  }
+  if (upsertError) return { data: null, error: upsertError };
 
   // Let the provider normalize/fill in anything it owns (a no-op for
   // 'manual'; a real courier's createShipment would return tracking
@@ -71,7 +91,7 @@ export async function createShipment(orderId, fields = {}) {
     .eq('id', shipment.id)
     .select().single();
 
-  await logShipmentEvent(shipment.id, 'pending', 'Shipment created.');
+  await logShipmentEvent(shipment.id, 'pending', existing ? `Provider set to ${provider.name}.` : 'Shipment created.');
   return { data: updated || shipment, error: null };
 }
 

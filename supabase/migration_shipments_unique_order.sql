@@ -1,0 +1,22 @@
+-- ═══════════════════════════════════════════════════════════════════
+-- Migration: One shipment per order (data-integrity fix)
+-- ═══════════════════════════════════════════════════════════════════
+-- Run once in the Supabase SQL editor.
+--
+-- Why: createShipment() previously did a blind INSERT with no check
+-- for an existing row, and nothing in the schema was stopping a
+-- second shipments row from being created for the same order — every
+-- order already gets a 'manual' placeholder shipment automatically on
+-- fulfillment (see fulfillOrder.ts), so calling createShipment() again
+-- (e.g. via the admin provider-picker) would have silently created a
+-- duplicate. The application code is now fixed to update the existing
+-- row instead of inserting a new one — this constraint is the
+-- database-level backstop for that, not a substitute for it.
+--
+-- If this fails with a "duplicate key" error, it means duplicate
+-- shipment rows already exist for some order — run this first to find
+-- them, then decide which of each pair to keep/delete before retrying:
+--
+--   select order_id, count(*) from shipments group by order_id having count(*) > 1;
+
+ALTER TABLE shipments ADD CONSTRAINT shipments_order_id_unique UNIQUE (order_id);

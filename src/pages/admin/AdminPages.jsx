@@ -1230,6 +1230,14 @@ function AdminShipmentPanel({ orderId }) {
     load();
   }
 
+  async function handleSwitchProvider(newSlug) {
+    if (newSlug === shipment.provider) return;
+    setSaving(true);
+    await createShipment(orderId, { provider: newSlug });
+    setSaving(false);
+    load();
+  }
+
   if (loading) return <div className="admin-card" style={{ marginTop: 20, padding: 24 }}><p className="admin-muted">Loading shipment…</p></div>;
 
   if (!shipment) {
@@ -1258,7 +1266,27 @@ function AdminShipmentPanel({ orderId }) {
       <div className="admin-card-header" style={{ padding: 0, marginBottom: 18, border: 'none' }}>
         <h2 className="admin-card-title">Shipment</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span className="t-small admin-muted" style={{ textTransform: 'capitalize' }}>{shipment.provider}</span>
+          {/* Every order gets a 'manual' placeholder shipment automatically
+              on fulfillment (see fulfillOrder.ts), so this is almost always
+              how a real courier actually gets assigned in practice — not
+              the "no shipment yet" empty state above, which in normal
+              operation never actually occurs. Locked once the shipment has
+              moved past 'pending' — switching couriers on something
+              already handed off doesn't make sense and could leave two
+              couriers both thinking they own it. */}
+          {shipment.shipment_status === 'pending' && providers.length > 1 ? (
+            <select
+              className="select"
+              style={{ textTransform: 'capitalize', padding: '4px 8px', fontSize: 13 }}
+              value={shipment.provider}
+              onChange={e => handleSwitchProvider(e.target.value)}
+              disabled={saving}
+            >
+              {providers.map(p => <option key={p.slug} value={p.slug}>{p.name}</option>)}
+            </select>
+          ) : (
+            <span className="t-small admin-muted" style={{ textTransform: 'capitalize' }}>{shipment.provider}</span>
+          )}
           <StatusPill value={shipment.shipment_status} colors={SHIPMENT_STATUS_COLORS} />
         </div>
       </div>
