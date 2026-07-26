@@ -4,6 +4,7 @@
 // sort, view profile/order history) — no edit/disable capability,
 // consistent with the rest of the current admin backend.
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { formatPrice } from '../../utils/format';
 import { fetchAllCustomers } from '../../lib/api/customers';
@@ -32,7 +33,8 @@ const CUSTOMER_SORTS = [
 export function AdminCustomersPage() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get('q') || '');
   const [statusFilter, setStatusFilter] = useState('');
   const [sort, setSort] = useState('newest');
   const [selected, setSelected] = useState(null);

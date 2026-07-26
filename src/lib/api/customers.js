@@ -41,6 +41,18 @@ export async function deleteAddress(addressId) {
   return { error };
 }
 
+// Same order_count/lifetime_spend computation as fetchAllCustomers below,
+// scoped to a single customer — used by the Order Detail page's Customer
+// card. Kept as its own function rather than reusing fetchAllCustomers
+// wholesale, since that one paginates/searches the whole customer list.
+export async function fetchCustomerOrderStats(userId) {
+  if (!userId) return { data: { count: 0, spend: 0 }, error: null };
+  const { data, error } = await supabase.from('orders').select('total').eq('user_id', userId);
+  if (error) return { data: { count: 0, spend: 0 }, error };
+  const spend = (data || []).reduce((sum, o) => sum + (o.total || 0), 0);
+  return { data: { count: (data || []).length, spend }, error: null };
+}
+
 // ── Admin ─────────────────────────────────────────────────────────
 export async function fetchAllCustomers({ limit = 50, offset = 0, search } = {}) {
   let query = supabase.from('customers')

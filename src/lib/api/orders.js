@@ -35,10 +35,11 @@ export async function fetchOrderById(orderId) {
 export async function fetchAllOrders({ status, limit = 50, offset = 0 } = {}) {
   let query = supabase
     .from('orders')
-    // payment_events nested under payments (real FK: payment_events.payment_id
-    // -> payments.id) gives the Order Detail page a genuine timeline of
-    // payment.captured/failed/refund events instead of a fabricated one.
-    .select(`*, order_items(*), payments(*, payment_events(*)), shipments(*)`, { count: 'exact' })
+    // order_items -> products join adds brand/category per line item
+    // (order_items itself already snapshots name/price/image_url/variant,
+    // so this is the only piece not already on the row). payment_events
+    // nested under payments (real FK) gives a genuine order timeline.
+    .select(`*, order_items(*, product:product_id(brand, category_slug)), payments(*, payment_events(*)), shipments(*)`, { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
   if (status) query = query.eq('status', status);
@@ -53,7 +54,7 @@ export async function fetchAllOrders({ status, limit = 50, offset = 0 } = {}) {
   const userIds = [...new Set((data || []).map(o => o.user_id).filter(Boolean))];
   let customersByUserId = {};
   if (userIds.length) {
-    const { data: custRows } = await supabase.from('customers').select('user_id, full_name, email').in('user_id', userIds);
+    const { data: custRows } = await supabase.from('customers').select('user_id, full_name, email, phone, created_at').in('user_id', userIds);
     customersByUserId = (custRows || []).reduce((acc, c) => { acc[c.user_id] = c; return acc; }, {});
   }
 
