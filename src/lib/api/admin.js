@@ -115,6 +115,36 @@ export async function updateCoupon(id, updates) {
   return { data, error };
 }
 
+// coupons.usage_count exists in the schema but is never actually
+// incremented anywhere in the order/checkout flow (verified: no
+// Edge Function or API call writes to it) — meaning it's permanently
+// stuck wherever it started, and the usage_limit check in
+// validateCoupon() above is silently non-functional as a result. This
+// computes real per-coupon redemption counts + total discount given
+// from actual orders.coupon_code/discount instead, since that data is
+// genuinely accurate. Read-only — does not fix the underlying gap
+// (that would mean touching checkout/order fulfillment logic).
+export async function fetchCouponRedemptions() {
+  const { data, error } = await supabase.from('orders').select('coupon_code, discount').not('coupon_code', 'is', null);
+  if (error) return { data: {}, error };
+  const byCode = {};
+  (data || []).forEach(o => {
+    const code = o.coupon_code.toUpperCase();
+    if (!byCode[code]) byCode[code] = { count: 0, discountGiven: 0 };
+    byCode[code].count += 1;
+    byCode[code].discountGiven += o.discount || 0;
+  });
+  return { data: byCode, error: null };
+}
+
+// No FK from orders to coupons (orders.coupon_code is a plain text
+// snapshot of the code at order time, not a reference) — a real
+// delete here can't orphan or break any historical order record.
+export async function deleteCoupon(id) {
+  const { error } = await supabase.from('coupons').delete().eq('id', id);
+  return { error };
+}
+
 // ── Newsletter ────────────────────────────────────────────────────
 export async function subscribeToNewsletter(email) {
   const { data, error } = await supabase

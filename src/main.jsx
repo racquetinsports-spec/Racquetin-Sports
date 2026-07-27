@@ -10,6 +10,7 @@ const AdminHome   = lazy(() => import('./pages/admin/AdminDashboard').then(m => 
 const AdminProductsPage     = lazy(() => import('./pages/admin/ProductsPage').then(m => ({ default: m.AdminProductsPage })));
 const AdminCategoriesPage   = lazy(() => import('./pages/admin/CategoriesPage').then(m => ({ default: m.AdminCategoriesPage })));
 const AdminOrdersPage       = lazy(() => import('./pages/admin/OrdersPage').then(m => ({ default: m.AdminOrdersPage })));
+const AdminCouponsPage      = lazy(() => import('./pages/admin/CouponsPage').then(m => ({ default: m.AdminCouponsPage })));
 const AdminOrderDetailPage  = lazy(() => import('./pages/admin/OrderDetailPage').then(m => ({ default: m.AdminOrderDetailPage })));
 const AdminCustomersPage    = lazy(() => import('./pages/admin/CustomersPage').then(m => ({ default: m.AdminCustomersPage })));
 const AdminNewsletterPage   = lazy(() => import('./pages/admin/NewsletterPage').then(m => ({ default: m.AdminNewsletterPage })));
@@ -31,6 +32,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="products" element={<Suspense fallback={null}><AdminProductsPage /></Suspense>} />
             <Route path="categories" element={<Suspense fallback={null}><AdminCategoriesPage /></Suspense>} />
             <Route path="orders" element={<Suspense fallback={null}><AdminOrdersPage /></Suspense>} />
+            <Route path="coupons" element={<Suspense fallback={null}><AdminCouponsPage /></Suspense>} />
             <Route path="orders/:id" element={<Suspense fallback={null}><AdminOrderDetailPage /></Suspense>} />
             <Route path="customers" element={<Suspense fallback={null}><AdminCustomersPage /></Suspense>} />
             <Route path="newsletter" element={<Suspense fallback={null}><AdminNewsletterPage /></Suspense>} />
