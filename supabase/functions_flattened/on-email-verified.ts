@@ -3,7 +3,7 @@
 // Regenerate with: node scripts/flatten-functions.mjs
 // Paste this whole file into the Supabase Dashboard function editor.
 // ─────────────────────────────────────────────────────────────
-
+import { SupabaseClient, createClient } from 'jsr:@supabase/supabase-js@2';
 
 // ═══ inlined: _shared/cors.ts ═══
 // ── CORS ──────────────────────────────────────────────────────────
@@ -29,20 +29,143 @@ export function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+// ═══ inlined: _shared/supabaseClients.ts ═══
+// ── Supabase clients for Edge Functions ──────────────────────────
+// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are automatically
+// injected by the Supabase platform into every Edge Function's
+// runtime environment — you do not need to set these yourself via
+// `supabase secrets set` (doing so is harmless but redundant).
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+// Full-privilege client — bypasses RLS entirely. Only ever used
+// server-side, never returned or exposed to the caller.
+export function getAdminClient(): SupabaseClient {
+  return createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+    auth: { persistSession: false },
+  });
+}
+
+// Resolves the calling user from the request's own JWT (the
+// anon-key client the frontend already authenticated with) — this is
+// how each Edge Function knows *who* is checking out without ever
+// trusting a user id the client could have sent in the request body.
+export async function getRequestUser(req: Request) {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) return { user: null, error: 'Missing Authorization header' };
+
+  const client = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false },
+  });
+  const { data, error } = await client.auth.getUser();
+  if (error || !data?.user) return { user: null, error: error?.message || 'Not authenticated' };
+  return { user: data.user, error: null };
+}
+
 // ═══ inlined: _shared/email.ts ═══
 // ── Order confirmation email (Resend) ─────────────────────────────
-// Sends from Resend's own verified default sender (onboarding@resend.dev)
-// with Reply-To set to your real support inbox — a third-party service
-// can never send authenticated mail claiming to be @gmail.com (SPF/DKIM/
-// DMARC would reject it), so this is the correct approach until a real
-// domain is verified with Resend, at which point only FROM_EMAIL below
-// needs to change.
+// FROM_EMAIL is read from the EMAIL_FROM Edge Function secret — set it
+// to your verified Resend domain's sender (e.g.
+// "RacquetIn Sports <orders@yourdomain.com>"). The hardcoded fallback
+// below is Resend's own shared sandbox sender, which is ALWAYS
+// restricted to sending only to your own account email regardless of
+// any domain verified elsewhere in the account — verifying a domain
+// does nothing by itself; this variable has to actually be set to use
+// it. If you see the sandbox-fallback warning in the logs, EMAIL_FROM
+// is missing or misspelled as a secret.
+
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-const FROM_EMAIL = Deno.env.get('ORDER_EMAIL_FROM') || 'RacquetIn <onboarding@resend.dev>';
+const SANDBOX_FALLBACK_FROM = 'RacquetIn <onboarding@resend.dev>';
+const FROM_EMAIL = Deno.env.get('EMAIL_FROM') || SANDBOX_FALLBACK_FROM;
 const REPLY_TO_EMAIL = Deno.env.get('ORDER_EMAIL_REPLY_TO') || 'racquetinsports@gmail.com';
 
-function formatRupees(paise: number): string {
-  return '₹' + Math.round(paise / 100).toLocaleString('en-IN');
+if (FROM_EMAIL === SANDBOX_FALLBACK_FROM) {
+  // Loud, not silent — this exact gap (env var never set, code quietly
+  // falls back to a sender that can only email the account owner) is
+  // what caused every email to fail after the domain was verified.
+  console.error('[email] EMAIL_FROM is not set — falling back to the Resend sandbox sender, which can only send to your own account email. Set EMAIL_FROM as an Edge Function secret to use your verified domain.');
+}
+
+// ── Currency contract ────────────────────────────────────────────
+// This codebase does NOT use one uniform unit for money — and that's
+// intentional, not an oversight (see create-razorpay-order/index.ts
+// for the full explanation):
+//   - order_items.price is plain RUPEES — a direct, unconverted
+//     snapshot of products.price.
+//   - orders.total/subtotal/tax/shipping_cost and payments.amount ARE
+//     paise — converted once, at the Razorpay boundary.
+// Two distinctly-named formatters instead of one generic one, so a
+// caller can't accidentally apply the wrong conversion without it
+// being visually obvious in the code. This is exactly the bug that
+// shipped before: formatRupees(item.price) treated an already-rupee
+// value as paise, silently dividing a ₹13,500 racket down to ₹135
+// while the (correctly paise) order total displayed fine right next
+// to it.
+function formatINR(amountInRupees: number): string {
+  return '₹' + Math.round(amountInRupees).toLocaleString('en-IN');
+}
+function formatINRFromPaise(amountInPaise: number): string {
+  return formatINR(amountInPaise / 100);
+}
+
+// ── Centralized idempotent send ────────────────────────────────────
+// Every email in this file should be sent through this wrapper, not by
+// calling Resend directly. It's the one place that: claims a
+// deterministic idempotency key via email_log's UNIQUE constraint
+// BEFORE sending (so a retried webhook/verification call can't send
+// twice), records the outcome durably, and captures Resend's own
+// message id for future reference (e.g. an admin resend/status tool).
+//
+// `send` is the actual Resend call, deferred until after the
+// idempotency claim succeeds — if the insert fails on the unique
+// constraint, `send` is never invoked at all.
+export async function sendEmailIdempotent({
+  admin, idempotencyKey, emailType, recipient, customerId, orderId, shipmentId, send,
+}: {
+  admin: SupabaseClient;
+  idempotencyKey: string;
+  emailType: string;
+  recipient: string;
+  customerId?: string | null;
+  orderId?: string | null;
+  shipmentId?: string | null;
+  send: () => Promise<{ sent: boolean; error?: string; providerMessageId?: string }>;
+}): Promise<{ sent: boolean; skipped: boolean; error?: string }> {
+  const { error: claimError } = await admin.from('email_log').insert([{
+    idempotency_key: idempotencyKey,
+    email_type: emailType,
+    recipient,
+    customer_id: customerId || null,
+    order_id: orderId || null,
+    shipment_id: shipmentId || null,
+    status: 'pending',
+    attempt_count: 1,
+  }]);
+
+  if (claimError) {
+    // 23505 = unique_violation — another call already claimed this
+    // exact idempotency key, meaning this email either already sent
+    // or is actively being sent right now. Either way, do not send
+    // again. Any OTHER error (e.g. table missing, bad column) fails
+    // safe by skipping the send entirely rather than risking an
+    // unlogged duplicate.
+    const alreadyClaimed = claimError.code === '23505';
+    return { sent: false, skipped: true, error: alreadyClaimed ? undefined : `Could not claim idempotency key: ${claimError.message}` };
+  }
+
+  const result = await send();
+
+  await admin.from('email_log').update({
+    status: result.sent ? 'sent' : 'failed',
+    provider_message_id: result.providerMessageId || null,
+    last_error: result.error || null,
+    sent_at: result.sent ? new Date().toISOString() : null,
+    updated_at: new Date().toISOString(),
+  }).eq('idempotency_key', idempotencyKey);
+
+  return { sent: result.sent, skipped: false, error: result.error };
 }
 
 export async function sendOrderConfirmationEmail({
@@ -52,7 +175,7 @@ export async function sendOrderConfirmationEmail({
   toName?: string | null;
   order: { order_number: string; total: number; payment_method?: string | null; created_at: string };
   items: Array<{ name: string; price: number; qty: number }>;
-}): Promise<{ sent: boolean; error?: string }> {
+}): Promise<{ sent: boolean; error?: string; providerMessageId?: string }> {
   // Email is a nice-to-have, never allowed to block or fail order
   // fulfillment — callers should treat a failure here as non-fatal.
   if (!RESEND_API_KEY) {
@@ -62,7 +185,7 @@ export async function sendOrderConfirmationEmail({
   const itemRows = items.map(i => `
     <tr>
       <td style="padding:10px 0;border-bottom:1px solid #eee;">${escapeHtml(i.name)} × ${i.qty}</td>
-      <td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;">${formatRupees(i.price * i.qty)}</td>
+      <td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;">${formatINR(i.price * i.qty)}</td>
     </tr>`).join('');
 
   const html = `
@@ -77,7 +200,7 @@ export async function sendOrderConfirmationEmail({
     </table>
     <table style="width:100%;border-collapse:collapse;font-size:14px;">
       ${itemRows}
-      <tr><td style="padding:14px 0 0;font-weight:700;">Total Paid</td><td style="padding:14px 0 0;text-align:right;font-weight:700;">${formatRupees(order.total)}</td></tr>
+      <tr><td style="padding:14px 0 0;font-weight:700;">Total Paid</td><td style="padding:14px 0 0;text-align:right;font-weight:700;">${formatINRFromPaise(order.total)}</td></tr>
     </table>
     <p style="font-size:13px;color:#666;margin-top:32px;">We'll send another email once your order ships. Questions? Just reply to this email.</p>
   </div>`;
@@ -101,7 +224,8 @@ export async function sendOrderConfirmationEmail({
       const body = await res.text();
       return { sent: false, error: `Resend API error (${res.status}): ${body}` };
     }
-    return { sent: true };
+    const body = await res.json().catch(() => null);
+    return { sent: true, providerMessageId: body?.id };
   } catch (err) {
     return { sent: false, error: err instanceof Error ? err.message : 'Unknown email error' };
   }
@@ -123,7 +247,7 @@ export async function sendVerificationWelcomeEmail({
 }: {
   toEmail: string;
   toName?: string | null;
-}): Promise<{ sent: boolean; error?: string }> {
+}): Promise<{ sent: boolean; error?: string; providerMessageId?: string }> {
   if (!RESEND_API_KEY) {
     return { sent: false, error: 'RESEND_API_KEY not configured' };
   }
@@ -156,7 +280,8 @@ export async function sendVerificationWelcomeEmail({
       const body = await res.text();
       return { sent: false, error: `Resend API error (${res.status}): ${body}` };
     }
-    return { sent: true };
+    const body = await res.json().catch(() => null);
+    return { sent: true, providerMessageId: body?.id };
   } catch (err) {
     return { sent: false, error: err instanceof Error ? err.message : 'Unknown email error' };
   }
@@ -180,6 +305,7 @@ export async function sendVerificationWelcomeEmail({
 // is not secret — it's visible in the trigger definition to anyone
 // with database access, and technically guessable) can't be used to
 // spam arbitrary email addresses.
+
 
 
 const EMAIL_WEBHOOK_SECRET = Deno.env.get('EMAIL_WEBHOOK_SECRET');
@@ -217,9 +343,21 @@ Deno.serve(async (req) => {
 
     // Best-effort — a failed send here should never make the
     // underlying auth.users update (or the trigger that called this)
-    // look like it failed. Delivery status is visible in the Resend
-    // dashboard if you need to check it.
-    const result = await sendVerificationWelcomeEmail({ toEmail: email, toName: fullName });
+    // look like it failed. Delivery status is visible in email_log
+    // (or the Resend dashboard) if you need to check it. The trigger's
+    // WHEN clause already guards against firing more than once per
+    // user, but the idempotency key is a second, durable line of
+    // defense — e.g. against Postgres retrying a delivery of the same
+    // webhook call.
+    const admin = getAdminClient();
+    const result = await sendEmailIdempotent({
+      admin,
+      idempotencyKey: `welcome:${record.id}`,
+      emailType: 'welcome',
+      recipient: email,
+      customerId: record.id,
+      send: () => sendVerificationWelcomeEmail({ toEmail: email, toName: fullName }),
+    });
 
     return jsonResponse({ success: true, emailSent: result.sent, emailError: result.error || null });
   } catch (err) {

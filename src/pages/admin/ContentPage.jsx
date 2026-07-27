@@ -307,7 +307,7 @@ function AdminFaqPanel() {
       {loading ? (
         <div className="admin-page-loading">Loading FAQs…</div>
       ) : (
-        <div className="apc-rows">
+        <div className="apc-rows admin-card-body">
           {faqs.map(f => (
             <div key={f.id} className="apc-row" style={{ alignItems: 'flex-start' }}>
               <div className="apc-row-info">

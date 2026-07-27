@@ -306,8 +306,16 @@ export function AdminOrderDetailPage() {
                     )}
                   </div>
                   <div className="aod-product-col"><span className="admin-muted t-small">Qty</span><div>{i.qty}</div></div>
-                  <div className="aod-product-col"><span className="admin-muted t-small">Unit Price</span><div>{formatPrice(i.price / 100)}</div></div>
-                  <div className="aod-product-col"><span className="admin-muted t-small">Subtotal</span><div style={{ fontWeight: 600 }}>{formatPrice((i.price * i.qty) / 100)}</div></div>
+                  {/* order_items.price is stored in plain rupees (it's a
+                      direct snapshot of products.price, never converted) —
+                      unlike order.total/subtotal/tax/shipping_cost below,
+                      which genuinely ARE paise (converted once at the
+                      Razorpay boundary in create-razorpay-order/index.ts).
+                      Dividing this by 100 was a real bug: a ₹13,500 racket
+                      displayed as ₹135. See that Edge Function's own
+                      comment for why this asymmetry exists intentionally. */}
+                  <div className="aod-product-col"><span className="admin-muted t-small">Unit Price</span><div>{formatPrice(i.price)}</div></div>
+                  <div className="aod-product-col"><span className="admin-muted t-small">Subtotal</span><div style={{ fontWeight: 600 }}>{formatPrice(i.price * i.qty)}</div></div>
                   {i.product_id && (
                     <a className="btn btn-outline btn-sm aod-print-hide" href={`/product/${i.product_id}`} target="_blank" rel="noreferrer">Open in Store ↗</a>
                   )}

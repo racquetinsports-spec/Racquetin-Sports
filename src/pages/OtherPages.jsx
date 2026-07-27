@@ -481,7 +481,15 @@ export function OrderConfirmationPage() {
             name: oi.name,
             brand: oi.product?.brand,
             category: oi.product?.category_slug,
-            price: (oi.price || 0) / 100, // snapshot stored in paise
+            // order_items.price is stored in plain rupees (a direct
+            // snapshot of products.price, never converted to paise) —
+            // unlike order.total/tax/shipping_cost below, which genuinely
+            // ARE paise. This was previously (wrongly) divided by 100,
+            // under-reporting every item's price to GA4 by 100x — same
+            // root cause as the order-confirmation email bug it was
+            // copied from. See create-razorpay-order/index.ts for why
+            // this asymmetry exists intentionally.
+            price: oi.price || 0,
           },
           quantity: oi.qty,
         }));

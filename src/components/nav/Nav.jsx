@@ -351,12 +351,22 @@ export default function Nav({ isHeroPage = false }) {
                                 produced no visible change regardless of the value used. */
           display: block;
         }
-        @media(max-width:640px){
+        @media(max-width:860px){
           /* Fluid instead of a flat px value — scales with the icons
              that were freed up below (search/wishlist moved into the
              drawer) instead of a fixed number that either overflowed
-             narrow phones or looked too small on larger ones. */
-          .nav-logo-img { height: clamp(40px, 12vw, 56px); }
+             narrow phones or looked too small on larger ones.
+             max-width is the actual overflow guard: at this wordmark's
+             ~6.8:1 aspect ratio, a height-only clamp still produces a
+             wider-than-available rendered width at the narrow end (the
+             math: at 320px, clamp's own 40px floor alone renders at
+             ~272px wide — more than the 320px viewport has left after
+             the icon group and page padding). When max-width and height
+             conflict on a replaced element, max-width wins and height
+             is recomputed from it — so this is a hard ceiling that
+             can't overflow regardless of viewport, with the clamp still
+             driving the "normal" size whenever there's room for it. */
+          .nav-logo-img { height: clamp(40px, 12vw, 56px); max-width: 46vw; }
         }
 
         /* Links */
@@ -373,11 +383,15 @@ export default function Nav({ isHeroPage = false }) {
         .nav-hamburger { display:none; flex-direction:column; gap:5px; padding:8px; }
         .nav-hamburger span { display:block; width:20px; height:1.5px; background:var(--bk); border-radius:1px; }
 
-        /* On phones, search and wishlist move into the drawer (Search
-           button up top, Wishlist in the footer) so the header only
-           ever has to fit: hamburger, logo, cart, account — which is
-           what leaves the logo above real room to be bigger. */
-        @media(max-width:640px){
+        /* On phones/tablets, search and wishlist move into the drawer
+           (Search button up top, Wishlist in the footer) so the header
+           only ever has to fit: hamburger, logo, cart, account. Unified
+           with the hamburger's own breakpoint (860px) — this used to
+           cut off at 640px while the hamburger pattern continued to
+           860px, leaving a 641–860px gap where every icon was visible
+           at once alongside a full-size logo, overflowing the header
+           in that entire range. */
+        @media(max-width:860px){
           .nav-icon-search, .nav-icon-wishlist { display:none; }
         }
 

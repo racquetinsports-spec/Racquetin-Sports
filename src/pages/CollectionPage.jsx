@@ -163,6 +163,20 @@ export default function CollectionPage({ category: categoryProp }) {
   // just an inline column there) but closed on mobile, where it's now a
   // fixed drawer that would otherwise cover the whole screen on load.
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth > 860 : true);
+
+  // Below 860px, .col-sidebar becomes a fixed overlay drawer (see its
+  // own media query further down) rather than the plain inline column
+  // it is on desktop — only in that overlay case should opening it
+  // lock background scroll; on desktop sidebarOpen just toggles a
+  // normal layout column, so this must not fire there.
+  useEffect(() => {
+    if (sidebarOpen && typeof window !== 'undefined' && window.innerWidth <= 860) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [sidebarOpen]);
+
   const [priceRange, setPriceRange]   = useState([0, meta.maxPrice || 30000]);
   const [activeBrand, setActiveBrand] = useState(null);
 
@@ -283,28 +297,26 @@ export default function CollectionPage({ category: categoryProp }) {
       <div className="container">
         {/* Toolbar */}
         <div className="col-toolbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button
-              className="btn btn-outline btn-sm col-filter-toggle"
-              onClick={() => setSidebarOpen(s => !s)}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="4" y1="6" x2="20" y2="6"/>
-                <line x1="4" y1="12" x2="20" y2="12"/>
-                <line x1="4" y1="18" x2="20" y2="18"/>
-              </svg>
-              Filters
-              {activeCount > 0 && (
-                <span className="badge badge-navy" style={{ marginLeft: 4 }}>{activeCount}</span>
-              )}
-            </button>
-            <span className="t-small">{loading ? 'Loading…' : `${displayed.length} product${displayed.length !== 1 ? 's' : ''}`}</span>
+          <button
+            className="btn btn-outline btn-sm col-filter-toggle"
+            onClick={() => setSidebarOpen(s => !s)}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="4" y1="6" x2="20" y2="6"/>
+              <line x1="4" y1="12" x2="20" y2="12"/>
+              <line x1="4" y1="18" x2="20" y2="18"/>
+            </svg>
+            Filters
             {activeCount > 0 && (
-              <button className="t-small col-clear-link" onClick={clearAll}>
-                Clear all
-              </button>
+              <span className="badge badge-navy" style={{ marginLeft: 4 }}>{activeCount}</span>
             )}
-          </div>
+          </button>
+          <span className="t-small col-toolbar-count">{loading ? 'Loading…' : `${displayed.length} product${displayed.length !== 1 ? 's' : ''}`}</span>
+          {activeCount > 0 && (
+            <button className="t-small col-clear-link" onClick={clearAll}>
+              Clear all
+            </button>
+          )}
           <select className="select col-sort" value={sort} onChange={e => setSort(e.target.value)}>
             {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
@@ -475,13 +487,46 @@ export default function CollectionPage({ category: categoryProp }) {
         .col-page { padding-bottom: 80px; }
         .col-hero { padding:48px 0 36px; border-bottom:1px solid var(--gr-5); }
         .col-brand-bar { border-bottom:1px solid var(--gr-5); background:var(--gr-6); }
-        .brand-tabs { display:flex; gap:4px; padding:12px 0; overflow-x:auto; }
+        .brand-tabs { display:flex; gap:4px; padding:12px 4px; overflow-x:auto; overscroll-behavior-inline:contain; scrollbar-width:none; }
+        .brand-tabs::-webkit-scrollbar { display:none; }
         .brand-tab { padding:7px 16px; font-size:12px; font-weight:600; letter-spacing:.04em; border:1.5px solid var(--gr-4); border-radius:100px; background:transparent; color:var(--bk); transition:var(--trans); white-space:nowrap; }
         .brand-tab:hover { border-color:var(--bk); }
         .brand-tab-active { background:var(--bk); color:var(--wh); border-color:var(--bk); }
-        .col-toolbar { display:flex; align-items:center; justify-content:space-between; padding:16px 0; border-bottom:1px solid var(--gr-5); margin-bottom:24px; }
+        /* Flat flex row on desktop — .col-sort's margin-left:auto alone
+           reproduces the original [Filters][count][Clear] ...... [Sort]
+           layout exactly, without needing the sub-wrapper div the JSX
+           used to have. That flattening is what makes the mobile grid
+           below possible: named grid-template-areas can place any of
+           these 4 controls independently of their DOM/desktop order,
+           which a nested wrapper would have prevented. */
+        .col-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:16px 0; border-bottom:1px solid var(--gr-5); margin-bottom:24px; }
+        .col-sort { width:200px; font-size:12px; padding:8px 32px 8px 12px; margin-left:auto; }
+
+        @media(max-width:640px){
+          /* The five controls (Filters, count, Clear, Sort, plus the
+             badge) were all fighting for one cramped row — width:200px
+             on the sort select never shrank, so on a 320–375px phone
+             the row simply didn't fit. Two rows via CSS Grid instead:
+             [Filters | Sort] on top (the two actual controls, equal
+             width), [count | Clear] below (metadata, only shown when
+             relevant). grid-template-areas places each control by name
+             rather than DOM order, so this doesn't touch the desktop
+             flex layout above at all. */
+          .col-toolbar {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-areas: "filters sort" "count clear";
+            column-gap: 10px;
+            row-gap: 10px;
+            align-items: center;
+          }
+          .col-filter-toggle { grid-area: filters; justify-content: center; min-height: 44px; }
+          .col-sort { grid-area: sort; width: 100%; min-width: 0; margin-left: 0; min-height: 44px; }
+          .col-toolbar-count { grid-area: count; }
+          .col-clear-link { grid-area: clear; justify-self: end; min-height: 44px; display: flex; align-items: center; }
+        }
+
         .col-filter-toggle { display:flex; align-items:center; gap:8px; }
-        .col-sort { width:200px; font-size:12px; padding:8px 32px 8px 12px; }
         .col-clear-link { font-size:11px; color:var(--gr-2); text-decoration:underline; background:none; border:none; cursor:pointer; padding:0; }
         .col-clear-link:hover { color:var(--bk); }
         .col-layout { display:flex; gap:32px; align-items:flex-start; }
@@ -489,9 +534,9 @@ export default function CollectionPage({ category: categoryProp }) {
         .col-sidebar-backdrop { display:none; }
         .col-sidebar-mobile-head { display:none; }
         .col-sidebar-close { display:none; }
-        .col-grid { flex:1; display:grid; gap:24px; }
-        .col-grid-narrow { grid-template-columns:repeat(3,1fr); }
-        .col-grid-wide   { grid-template-columns:repeat(4,1fr); }
+        .col-grid { flex:1; display:grid; gap:24px; min-width:0; }
+        .col-grid-narrow { grid-template-columns:repeat(3, minmax(0,1fr)); }
+        .col-grid-wide   { grid-template-columns:repeat(4, minmax(0,1fr)); }
         .col-empty { grid-column:1/-1; text-align:center; padding:64px 0; }
         .filter-group { margin-bottom:24px; }
         .filter-group-head { font-size:10px; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--gr-2); margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--gr-5); }
@@ -502,9 +547,9 @@ export default function CollectionPage({ category: categoryProp }) {
         .filter-radio { border-radius:50%; }
         .filter-price-row { display:flex; justify-content:space-between; margin-bottom:8px; }
         .filter-range { width:100%; accent-color:var(--cr); cursor:pointer; }
-        @media(max-width:1100px){ .col-grid-narrow{grid-template-columns:repeat(2,1fr);} .col-grid-wide{grid-template-columns:repeat(3,1fr);} }
+        @media(max-width:1100px){ .col-grid-narrow{grid-template-columns:repeat(2, minmax(0,1fr));} .col-grid-wide{grid-template-columns:repeat(3, minmax(0,1fr));} }
         @media(max-width:860px){
-          .col-grid-narrow,.col-grid-wide{grid-template-columns:repeat(2,1fr);}
+          .col-grid-narrow,.col-grid-wide{grid-template-columns:repeat(2, minmax(0,1fr));}
 
           /* Filters become a fixed, scrollable drawer sliding in from the
              left with a tap-to-close backdrop, instead of being hidden
@@ -540,7 +585,7 @@ export default function CollectionPage({ category: categoryProp }) {
           }
           .col-sidebar-close:hover { background:var(--gr-6); }
         }
-        @media(max-width:540px){ .col-grid-narrow,.col-grid-wide{grid-template-columns:1fr 1fr; gap:12px;} }
+        @media(max-width:540px){ .col-grid-narrow,.col-grid-wide{grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px;} }
       `}</style>
     </div>
   );

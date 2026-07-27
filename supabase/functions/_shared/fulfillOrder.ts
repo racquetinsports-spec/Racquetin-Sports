@@ -8,7 +8,7 @@
 // duplicate — Razorpay webhooks and client verification can both
 // arrive for the same payment, sometimes more than once.
 import { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
-import { sendOrderConfirmationEmail } from './email.ts';
+import { sendOrderConfirmationEmail, sendEmailIdempotent } from './email.ts';
 
 export async function fulfillOrderFromIntent({
   admin, providerOrderId, providerPaymentId, paymentMethod, rawPayment,
@@ -156,14 +156,25 @@ export async function fulfillOrderFromIntent({
     } else if (!customer?.email) {
       emailError = `No customers row (or no email on it) for user_id ${intent.user_id}`;
     } else {
-      const result = await sendOrderConfirmationEmail({
-        toEmail: customer.email,
-        toName: customer.full_name,
-        order: { order_number: order.order_number, total: order.total, payment_method: paymentMethod, created_at: order.created_at },
-        items: items.map(i => ({ name: i.name, price: i.price, qty: i.qty })),
+      const result = await sendEmailIdempotent({
+        admin,
+        idempotencyKey: `order_confirmation:${order.id}`,
+        emailType: 'order_confirmation',
+        recipient: customer.email,
+        customerId: intent.user_id,
+        orderId: order.id,
+        send: () => sendOrderConfirmationEmail({
+          toEmail: customer.email,
+          toName: customer.full_name,
+          order: { order_number: order.order_number, total: order.total, payment_method: paymentMethod, created_at: order.created_at },
+          items: items.map(i => ({ name: i.name, price: i.price, qty: i.qty })),
+        }),
       });
       emailSent = result.sent;
       emailError = result.error || null;
+      if (result.skipped && !result.error) {
+        console.log(`[fulfillOrder] order confirmation email already sent for order ${order.id} — skipped duplicate`);
+      }
     }
   } catch (err) {
     emailError = err instanceof Error ? err.message : 'Unknown error sending order confirmation email';

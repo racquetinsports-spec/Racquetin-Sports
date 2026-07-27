@@ -306,6 +306,22 @@ export function AdminProductsPage() {
 
       {loading ? (
         <div className="admin-page-loading">Loading products…</div>
+      ) : products.length === 0 ? (
+        <div className="admin-empty">
+          <div className="admin-empty-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3m18 0-9 5-9-5m18 0v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/></svg>
+          </div>
+          <h3>No products yet</h3>
+          <p>Products you add will be grouped here by category.</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="admin-empty">
+          <div className="admin-empty-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
+          </div>
+          <h3>No products match your filters</h3>
+          <p>Try a different search term, or clear the stock/status filters.</p>
+        </div>
       ) : (
         <div className="apc-categories">
           {categories.map(cat => {

@@ -100,8 +100,12 @@ export function AdminOrdersPage() {
       {loading ? (
         <div className="admin-page-loading">Loading orders…</div>
       ) : filtered.length === 0 ? (
-        <div className="admin-card" style={{ padding: 48, textAlign: 'center' }}>
-          <p className="admin-muted">No orders found.</p>
+        <div className="admin-empty">
+          <div className="admin-empty-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
+          </div>
+          <h3>No orders found</h3>
+          <p>Try a different status filter, or check back once new orders come in.</p>
         </div>
       ) : (
         <div className="aor-list">

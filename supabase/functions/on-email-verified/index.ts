@@ -16,7 +16,8 @@
 // with database access, and technically guessable) can't be used to
 // spam arbitrary email addresses.
 import { jsonResponse } from '../_shared/cors.ts';
-import { sendVerificationWelcomeEmail } from '../_shared/email.ts';
+import { getAdminClient } from '../_shared/supabaseClients.ts';
+import { sendVerificationWelcomeEmail, sendEmailIdempotent } from '../_shared/email.ts';
 
 const EMAIL_WEBHOOK_SECRET = Deno.env.get('EMAIL_WEBHOOK_SECRET');
 
@@ -53,9 +54,21 @@ Deno.serve(async (req) => {
 
     // Best-effort — a failed send here should never make the
     // underlying auth.users update (or the trigger that called this)
-    // look like it failed. Delivery status is visible in the Resend
-    // dashboard if you need to check it.
-    const result = await sendVerificationWelcomeEmail({ toEmail: email, toName: fullName });
+    // look like it failed. Delivery status is visible in email_log
+    // (or the Resend dashboard) if you need to check it. The trigger's
+    // WHEN clause already guards against firing more than once per
+    // user, but the idempotency key is a second, durable line of
+    // defense — e.g. against Postgres retrying a delivery of the same
+    // webhook call.
+    const admin = getAdminClient();
+    const result = await sendEmailIdempotent({
+      admin,
+      idempotencyKey: `welcome:${record.id}`,
+      emailType: 'welcome',
+      recipient: email,
+      customerId: record.id,
+      send: () => sendVerificationWelcomeEmail({ toEmail: email, toName: fullName }),
+    });
 
     return jsonResponse({ success: true, emailSent: result.sent, emailError: result.error || null });
   } catch (err) {
