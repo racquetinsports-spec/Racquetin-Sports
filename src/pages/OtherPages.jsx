@@ -976,10 +976,10 @@ export function AccountPage() {
   return (
     <div className="container-sm" style={{ padding: '60px 0 80px' }}>
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
-          <div>
+        <div className="acct-header-row">
+          <div className="acct-header-info">
             <h1 className="t-h2">My Account</h1>
-            <p className="t-body" style={{ marginTop: 4 }}>{user.email}</p>
+            <p className="t-body acct-email" style={{ marginTop: 4 }}>{user.email}</p>
           </div>
           <button className="btn btn-outline" onClick={() => signOut()}>Sign Out</button>
         </div>
@@ -1066,6 +1066,16 @@ export function AccountPage() {
         )}
       </div>
       <style>{`
+        .acct-header-row { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:32px; }
+        .acct-header-info { min-width:0; } /* lets the email below actually shrink/wrap instead of forcing the row wider */
+        .acct-email { overflow-wrap:anywhere; }
+        @media(max-width:480px){
+          /* Stack rather than crowd Sign Out against a long email on
+             narrow phones — the row was fine on wider phones, but at
+             the low end the button had nowhere left to go. */
+          .acct-header-row { flex-direction:column; align-items:flex-start; }
+          .acct-header-row .btn { width:100%; }
+        }
         .acc-shipment { background:var(--gr-6); border-radius:var(--r-sm); padding:16px; }
         .acc-shipment-row { display:flex; justify-content:space-between; padding:4px 0; }
         .acc-shipment-status { font-size:12px; font-weight:600; }

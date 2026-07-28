@@ -358,16 +358,23 @@ export default function Nav({ isHeroPage = false }) {
              narrow phones or looked too small on larger ones.
              max-width is the actual overflow guard: at this wordmark's
              ~6.8:1 aspect ratio, a height-only clamp still produces a
-             wider-than-available rendered width at the narrow end (the
-             math: at 320px, clamp's own 40px floor alone renders at
-             ~272px wide — more than the 320px viewport has left after
-             the icon group and page padding). When max-width and height
-             conflict on a replaced element, max-width wins and height
-             is recomputed from it — so this is a hard ceiling that
-             can't overflow regardless of viewport, with the clamp still
-             driving the "normal" size whenever there's room for it. */
-          .nav-logo-img { height: clamp(40px, 12vw, 56px); max-width: 46vw; }
+             wider-than-available rendered width at the narrow end. 44vw
+             keeps the rendered width inside ~140-190px across the full
+             320-430px phone range — the range called out explicitly —
+             rather than the previous 46vw, which drifted a little past
+             190px at the largest phones. */
+          .nav-logo-img { height: clamp(40px, 12vw, 56px); max-width: 44vw; }
         }
+        /* The mobile drawer (.mobile-nav) is only 88vw wide, capped at
+           400px — nowhere near the full viewport the rule above is
+           computed against. Reusing that same 44vw there would let the
+           logo eat well over half the drawer's actual usable width
+           (confirmed: at 390px viewport, the drawer has ~303px of usable
+           width after its own padding, and 44vw would size the logo to
+           ~172px of that — 57%). This scopes a smaller, drawer-relative
+           ceiling instead, so it reads as balanced against the drawer's
+           own width rather than the header's. */
+        .mobile-nav-header .nav-logo-img { max-width: 140px; }
 
         /* Links */
         .nav-links { display:flex; align-items:center; gap:2px; }
