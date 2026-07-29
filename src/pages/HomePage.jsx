@@ -148,6 +148,10 @@ function HeroCanvas({ heroText, heroCta }) {
   // RAF → React bridge: called from inside the Three.js loop
   // Uses a requestAnimationFrame so it batches with React's scheduler
   const syncSceneRef = useRef(null);
+  // React → RAF bridge, the reverse direction — lets the progress dots
+  // below (plain React click handlers) jump the actual in-progress
+  // value living inside the Three.js effect's closure.
+  const jumpToProgressRef = useRef(null);
 
   useEffect(() => {
     // Sync scene index to React state, debounced to animation frame
@@ -262,22 +266,117 @@ function HeroCanvas({ heroText, heroCta }) {
 
     // ── Smooth state ─────────────────────────────────────────────
     const S = { cx:0, cy:0.5, cz:13, tx:0, ty:0.4, tz:0, fov:28, ry:0, rz:0, rx:0 };
-    let iT = 0, lastT = performance.now(), rawY = 0, smY = 0;
+    let iT = 0, lastT = performance.now();
+    // rawP/smP are the new normalized (0–1) progress pair, replacing the
+    // old pixel-space rawY/smY (which was window.scrollY divided by a
+    // 7-viewport-tall wrapper — see HomePage's own comment on why that
+    // wrapper is gone). Every input source below only ever nudges rawP;
+    // smP is what actually feeds the keyframes, smoothed exactly like
+    // before via exd(), just no longer scroll-shaped.
+    let rawP = 0, smP = 0;
     let mnx = 0, mny = 0, mtx = 0, mty = 0, sv = 0;
     let introLocked = true;
     let rafId;
 
-    const HERO_H = () => window.innerHeight * 7;
-    const onScroll = () => { if (!introLocked) rawY = window.scrollY; };
+    // Tuned so one deliberate full-width swipe/drag moves through
+    // roughly a third of the sequence (2–3 swipes to see everything)
+    // rather than the whole thing at once or barely anything. Recomputed
+    // on resize below (e.g. phone rotation) rather than fixed at mount.
+    let GESTURE_SENSITIVITY = 1 / (window.innerWidth * 2.2);
+    const WHEEL_SENSITIVITY   = 0.0016;
+    const KEY_STEP            = 0.12;
+    // Below this, a touch is treated as a tap/jitter, not a swipe —
+    // avoids the animation twitching on incidental finger movement.
+    const TOUCH_THRESHOLD_PX  = 10;
+    // Touches starting this close to the left edge are left alone so
+    // they don't fight iOS's own edge-swipe-back gesture.
+    const IOS_EDGE_GUARD_PX   = 24;
+
+    const addP = (delta) => { rawP = clamp(rawP + delta, 0, 1); };
+    jumpToProgressRef.current = (target) => { rawP = clamp(target, 0, 1); };
+
+    // ── Touch: dominant-axis gesture detection ─────────────────────
+    // touch-action:pan-y (set on .hero-canvas-mount below) already
+    // tells the browser vertical panning is always allowed here — this
+    // handler's only job is deciding, per the recommended rule in the
+    // brief, whether a given touch is "clearly more horizontal than
+    // vertical" and if so claiming it for the animation; otherwise it
+    // does nothing at all and the browser's own vertical scroll just
+    // proceeds untouched.
+    let touchActive = false, touchIsHorizontal = null, touchStartX = 0, touchStartY = 0, touchLastX = 0;
+    const onTouchStart = e => {
+      if (introLocked || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      if (t.clientX <= IOS_EDGE_GUARD_PX) return; // let iOS handle back-swipe
+      touchActive = true;
+      touchIsHorizontal = null;
+      touchStartX = touchLastX = t.clientX;
+      touchStartY = t.clientY;
+    };
+    const onTouchMove = e => {
+      if (!touchActive || introLocked) return;
+      const t = e.touches[0];
+      const dx = t.clientX - touchStartX, dy = t.clientY - touchStartY;
+      if (touchIsHorizontal === null) {
+        if (Math.abs(dx) < TOUCH_THRESHOLD_PX && Math.abs(dy) < TOUCH_THRESHOLD_PX) return; // not enough movement yet to tell
+        touchIsHorizontal = Math.abs(dx) > Math.abs(dy);
+      }
+      if (!touchIsHorizontal) return; // vertical gesture — leave it to the browser entirely
+      e.preventDefault(); // only once we're certain this is our gesture, not the page's
+      addP((t.clientX - touchLastX) * GESTURE_SENSITIVITY * 60);
+      touchLastX = t.clientX;
+    };
+    const onTouchEnd = () => { touchActive = false; touchIsHorizontal = null; };
+
+    // ── Trackpad / wheel: horizontal-axis only ──────────────────────
+    const onWheel = e => {
+      if (introLocked) return;
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return; // vertical intent — let the page scroll normally
+      e.preventDefault();
+      addP(e.deltaX * WHEEL_SENSITIVITY);
+    };
+
+    // ── Mouse: click-and-drag fallback (no horizontal wheel axis) ───
+    let dragActive = false, dragLastX = 0;
+    const onPointerDown = e => {
+      if (introLocked || e.pointerType !== 'mouse' || e.button !== 0) return;
+      dragActive = true;
+      dragLastX = e.clientX;
+      mount.setPointerCapture?.(e.pointerId);
+      mount.classList.add('hero-dragging');
+    };
+    const onPointerMove = e => {
+      if (!dragActive) return;
+      addP((e.clientX - dragLastX) * GESTURE_SENSITIVITY * 60);
+      dragLastX = e.clientX;
+    };
+    const endDrag = () => { dragActive = false; mount.classList.remove('hero-dragging'); };
+
+    // ── Keyboard: accessible, discrete steps ─────────────────────────
+    const onKeyDown = e => {
+      if (introLocked) return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); addP(KEY_STEP); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); addP(-KEY_STEP); }
+    };
+
     const onMouse  = e => {
       mnx = (e.clientX / window.innerWidth  - 0.5) * 2;
       mny = (e.clientY / window.innerHeight - 0.5) * 2;
-      const p = clamp(smY / HERO_H(), 0, 1);
-      if (p > 0.48 && p < 0.62)
+      if (smP > 0.48 && smP < 0.62)
         sv = Math.min(sv + (Math.abs(e.movementX) + Math.abs(e.movementY)) * 0.0005, 0.015);
     };
-    window.addEventListener('scroll',    onScroll, { passive: true });
     window.addEventListener('mousemove', onMouse);
+    mount.addEventListener('touchstart', onTouchStart, { passive: true });
+    mount.addEventListener('touchmove',  onTouchMove,  { passive: false }); // needs to conditionally preventDefault
+    mount.addEventListener('touchend',   onTouchEnd,   { passive: true });
+    mount.addEventListener('touchcancel',onTouchEnd,   { passive: true });
+    mount.addEventListener('wheel',      onWheel,      { passive: false }); // needs to conditionally preventDefault
+    mount.addEventListener('pointerdown',onPointerDown);
+    mount.addEventListener('pointermove',onPointerMove);
+    mount.addEventListener('pointerup',  endDrag);
+    mount.addEventListener('pointercancel', endDrag);
+    mount.addEventListener('pointerleave',  endDrag);
+    mount.addEventListener('keydown', onKeyDown);
 
     // ── GLB load ─────────────────────────────────────────────────
     let racketGroup = null;
@@ -340,11 +439,16 @@ function HeroCanvas({ heroText, heroCta }) {
       const dt = Math.min((now - lastT) / 1000, 0.05);
       lastT = now; iT += dt;
 
-      smY = exd(smY, rawY, 9, dt);
-      const p  = clamp(smY / HERO_H(), 0, 1);
+      // Smoothing rate: much snappier for prefers-reduced-motion — the
+      // camera still moves (removing the feature entirely would hide
+      // real content), but settles almost immediately instead of
+      // gliding, and the large sweeping motion between keyframes reads
+      // far more like a direct cut than a continuous camera move.
+      smP = exd(smP, rawP, prefersReducedMotion ? 30 : 9, dt);
+      const p  = clamp(smP, 0, 1);
       const kf = interpKF(p);
 
-      const KC = 5.0, KR = 4.8;
+      const KC = prefersReducedMotion ? 20 : 5.0, KR = prefersReducedMotion ? 20 : 4.8;
       S.cx  = exd(S.cx,  kf.cp.x, KC, dt);
       S.cy  = exd(S.cy,  kf.cp.y, KC, dt);
       S.cz  = exd(S.cz,  kf.cp.z, KC, dt);
@@ -356,7 +460,7 @@ function HeroCanvas({ heroText, heroCta }) {
       S.rz  = exd(S.rz,  kf.rz,   KR, dt);
       S.rx  = exd(S.rx,  kf.rx,   KR, dt);
 
-      const rest   = clamp(1 - Math.abs(rawY - smY) * 0.002, 0, 1);
+      const rest   = clamp(1 - Math.abs(rawP - smP) * 12, 0, 1);
       const floatY = Math.sin(iT * 0.52) * 0.03 * rest;
       const bRz    = Math.sin(iT * 0.37) * 0.008 * rest;
       const bRy    = Math.sin(iT * 0.29) * 0.006 * rest;
@@ -412,14 +516,25 @@ function HeroCanvas({ heroText, heroCta }) {
       renderer.setSize(window.innerWidth, window.innerHeight);
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
+      GESTURE_SENSITIVITY = 1 / (window.innerWidth * 2.2);
     };
     window.addEventListener('resize', onResize);
 
     return () => {
       cancelAnimationFrame(rafId);
-      window.removeEventListener('scroll',    onScroll);
       window.removeEventListener('mousemove', onMouse);
       window.removeEventListener('resize',    onResize);
+      mount.removeEventListener('touchstart', onTouchStart);
+      mount.removeEventListener('touchmove',  onTouchMove);
+      mount.removeEventListener('touchend',   onTouchEnd);
+      mount.removeEventListener('touchcancel',onTouchEnd);
+      mount.removeEventListener('wheel',      onWheel);
+      mount.removeEventListener('pointerdown',onPointerDown);
+      mount.removeEventListener('pointermove',onPointerMove);
+      mount.removeEventListener('pointerup',  endDrag);
+      mount.removeEventListener('pointercancel', endDrag);
+      mount.removeEventListener('pointerleave',  endDrag);
+      mount.removeEventListener('keydown', onKeyDown);
       renderer.dispose();
       if (mount.contains(renderer.domElement))
         mount.removeChild(renderer.domElement);
@@ -458,7 +573,12 @@ function HeroCanvas({ heroText, heroCta }) {
       </div>
 
       {/* Three.js canvas mount */}
-      <div ref={mountRef} className="hero-canvas-mount" />
+      <div
+        ref={mountRef}
+        className="hero-canvas-mount"
+        tabIndex={0}
+        aria-label="Interactive 3D badminton racket. Use left and right arrow keys, or swipe/drag, to explore its features."
+      />
 
       {/* ── Intro overlay ───────────────────────────────────────── */}
       <div className={`hero-intro
@@ -536,9 +656,15 @@ function HeroCanvas({ heroText, heroCta }) {
       {introStep >= 4 && (
         <div className="hero-dots">
           {SCENES.map((_, i) => (
-            <div
+            <button
               key={i}
+              type="button"
               className={`hero-dot ${activeScene === i ? 'hero-dot-on' : ''}`}
+              aria-label={`Jump to ${SCENES[i].ey || `stage ${i + 1}`}`}
+              onClick={() => {
+                const [lo, hi] = SCENE_RANGES[i];
+                jumpToProgressRef.current?.((lo + hi) / 2);
+              }}
             />
           ))}
         </div>
@@ -590,9 +716,9 @@ function HeroCanvas({ heroText, heroCta }) {
             </svg>
             <div className="hero-hint-text-desktop">
               <strong>Interactive 3D Experience</strong>
-              <span>Move your mouse to explore · Drag to rotate · Scroll to continue</span>
+              <span>Drag or scroll horizontally to explore</span>
             </div>
-            <div className="hero-hint-text-mobile">Swipe to explore the racket</div>
+            <div className="hero-hint-text-mobile">Swipe to explore</div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -627,6 +753,18 @@ function HeroCanvas({ heroText, heroCta }) {
         .hero-canvas-mount {
           position: absolute;
           inset: 0;
+          /* Browser handles vertical panning natively and always — our
+             touchmove handler only ever intervenes once it's confirmed
+             a horizontal gesture, so this isn't fighting our own JS,
+             it's the fallback for every touch that isn't. */
+          touch-action: pan-y;
+          cursor: grab;
+        }
+        .hero-canvas-mount:active,
+        .hero-canvas-mount.hero-dragging { cursor: grabbing; }
+        .hero-canvas-mount:focus-visible {
+          outline: 2px solid var(--cr);
+          outline-offset: -2px;
         }
 
         /* ── Architectural court-line background ──────────────────
@@ -910,12 +1048,28 @@ function HeroCanvas({ heroText, heroCta }) {
         }
         .hero-dot {
           width: 3px; height: 3px;
+          /* Invisible larger tap/click target — the visible dot stays
+             exactly the same tiny size and spacing it always was (still
+             doesn't compete visually with the product); the negative
+             margin cancels the padding's own layout footprint out again
+             so the flex gap between VISIBLE dots is unchanged, while the
+             padding itself still enlarges the actual clickable area. */
+          padding: 7px;
+          margin: -7px;
+          background-clip: content-box;
+          background-color: rgba(0,0,0,.2);
+          border: none;
           border-radius: 50%;
-          background: rgba(0,0,0,.2);
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
           transition: all .35s;
         }
+        .hero-dot:focus-visible {
+          outline: 2px solid var(--cr);
+          outline-offset: 2px;
+        }
         .hero-dot-on {
-          background: var(--cr);
+          background-color: var(--cr);
           transform: scale(1.9);
         }
 
@@ -1605,12 +1759,11 @@ export default function HomePage() {
 
   return (
     <div>
-      {/* 3D Cinematic Hero — sticky scroll */}
-      <div style={{ height: '700vh' }}>
-        <div style={{ position: 'sticky', top: 0, height: '100vh' }}>
-          <HeroCanvas heroText={heroText} heroCta={heroCta} />
-        </div>
-      </div>
+      {/* 3D Cinematic Hero — no longer a scroll-driven pin. The GLB
+          animation now advances on horizontal swipe/drag/wheel/keyboard
+          input (handled entirely inside HeroCanvas); normal vertical
+          scroll just scrolls the page like any other section. */}
+      <HeroCanvas heroText={heroText} heroCta={heroCta} />
 
       {/* E-commerce sections */}
       <div style={{ position: 'relative', zIndex: 10, background: '#fff' }}>
