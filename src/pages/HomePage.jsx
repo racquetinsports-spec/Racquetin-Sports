@@ -287,7 +287,15 @@ function HeroCanvas({ heroText, heroCta }) {
     const KEY_STEP            = 0.12;
     // Below this, a touch is treated as a tap/jitter, not a swipe —
     // avoids the animation twitching on incidental finger movement.
-    const TOUCH_THRESHOLD_PX  = 10;
+    // Kept deliberately low: iOS Safari's own native scroll-gesture
+    // recognizer commits to a direction on essentially the FIRST
+    // touchmove sample (a few px), and once it's committed, a LATER
+    // preventDefault() call in the same touch sequence is a well-known
+    // no-op in WebKit — the page scrolls anyway even though our JS
+    // correctly identified the gesture as horizontal a moment later.
+    // A low threshold makes our own decision resolve within the first
+    // sample or two, so it's actually in time to matter.
+    const TOUCH_THRESHOLD_PX  = 4;
     // Touches starting this close to the left edge are left alone so
     // they don't fight iOS's own edge-swipe-back gesture.
     const IOS_EDGE_GUARD_PX   = 24;
@@ -323,7 +331,7 @@ function HeroCanvas({ heroText, heroCta }) {
       }
       if (!touchIsHorizontal) return; // vertical gesture — leave it to the browser entirely
       e.preventDefault(); // only once we're certain this is our gesture, not the page's
-      addP((t.clientX - touchLastX) * GESTURE_SENSITIVITY * 60);
+      addP((t.clientX - touchLastX) * GESTURE_SENSITIVITY);
       touchLastX = t.clientX;
     };
     const onTouchEnd = () => { touchActive = false; touchIsHorizontal = null; };
@@ -347,7 +355,7 @@ function HeroCanvas({ heroText, heroCta }) {
     };
     const onPointerMove = e => {
       if (!dragActive) return;
-      addP((e.clientX - dragLastX) * GESTURE_SENSITIVITY * 60);
+      addP((e.clientX - dragLastX) * GESTURE_SENSITIVITY);
       dragLastX = e.clientX;
     };
     const endDrag = () => { dragActive = false; mount.classList.remove('hero-dragging'); };
