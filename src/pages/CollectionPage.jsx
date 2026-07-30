@@ -132,7 +132,7 @@ const BrandTabs = memo(function BrandTabs({ brands, active, onSelect }) {
 
 export default function CollectionPage({ category: categoryProp }) {
   const { category: categoryParam } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const category = categoryProp || categoryParam || 'rackets';
   const meta = CATEGORY_META[category] || CATEGORY_META.rackets;
 
@@ -157,7 +157,23 @@ export default function CollectionPage({ category: categoryProp }) {
     return () => { cancelled = true; };
   }, [category]);
 
-  const [sort, setSort]               = useState('featured');
+  // Sort lives in the URL (?sort=...), not just component state — a
+  // plain useState here resets to its default the instant this page
+  // unmounts, which happens on every navigation to a product page and
+  // back. Reading the initial value from the URL, and writing back to
+  // it on change, means the preference actually survives that trip
+  // (and works with the browser back button, and is shareable) —
+  // matching the same pattern already used for ?brand=/?level= above.
+  const [sort, setSortState] = useState(() => searchParams.get('sort') || 'featured');
+  const setSort = (value) => {
+    setSortState(value);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (value === 'featured') next.delete('sort'); // default — no need to clutter the URL with it
+      else next.set('sort', value);
+      return next;
+    }, { replace: true }); // replace, not push — changing sort repeatedly shouldn't fill up browser history
+  };
   const [activeFilters, setActiveFilters] = useState({});
   // Sidebar defaults open on desktop (unchanged prior behaviour — it's
   // just an inline column there) but closed on mobile, where it's now a
