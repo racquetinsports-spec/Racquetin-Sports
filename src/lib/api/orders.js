@@ -20,6 +20,17 @@ export async function attachGuestOrder(orderId) {
   return { attached: !!data?.attached, error: null };
 }
 
+// Companion to attachGuestOrder above — claims every unclaimed guest
+// order matching the caller's own verified email, not just one
+// specific order id. See attach-my-guest-orders' own comments for why
+// both exist rather than just one.
+export async function attachMyGuestOrders() {
+  const { data, error } = await supabase.functions.invoke('attach-my-guest-orders', { body: {} });
+  if (error) return { attachedCount: 0, error: error.message || 'Could not check for guest orders' };
+  if (data?.error) return { attachedCount: 0, error: data.error };
+  return { attachedCount: data?.attachedCount || 0, error: null };
+}
+
 export async function fetchOrders() {
   const { user } = await getUser();
   if (!user || !isSupabaseConfigured()) return { data: [], error: null };

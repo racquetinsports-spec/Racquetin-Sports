@@ -7,7 +7,7 @@ import { useWishlist } from '../hooks/useWishlist';
 import { useAuth } from '../hooks/useAuth';
 import { signOut, signIn } from '../lib/auth';
 import { initiatePayment, createRazorpayOrder, verifyRazorpayPayment, loadRazorpayScript, checkPaymentStatus, checkEmailExists } from '../lib/api/payments';
-import { fetchOrders, fetchOrderById, attachGuestOrder } from '../lib/api/orders';
+import { fetchOrders, fetchOrderById, attachGuestOrder, attachMyGuestOrders } from '../lib/api/orders';
 import { fetchMyShipments } from '../lib/api/shipments';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { fetchProducts, fetchProductsByIds } from '../lib/api/products';
@@ -661,9 +661,16 @@ export function OrderConfirmationPage() {
           <p className="t-small" style={{ marginTop: 20, color: 'var(--cr)' }}>✓ This order has been added to your account.</p>
         )}
 
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 32 }}>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 32, flexWrap: 'wrap' }}>
           <Link to="/rackets" className="btn btn-outline btn-lg">Continue Shopping</Link>
-          <Link to="/account" className="btn btn-primary btn-lg">Order History</Link>
+          {order.user_id || user ? (
+            <Link to="/account" className="btn btn-primary btn-lg">Order History</Link>
+          ) : (
+            <>
+              <Link to={`/auth/login?redirect=order/${order.id}`} className="btn btn-outline btn-lg">Sign In</Link>
+              <Link to={`/auth/register?redirect=order/${order.id}`} className="btn btn-primary btn-lg">Create Account</Link>
+            </>
+          )}
         </div>
       </div>
       <style>{`
@@ -1070,17 +1077,25 @@ export function AccountPage() {
 
   useEffect(() => {
     if (!user) return;
-    fetchOrders().then(({ data }) => {
-      const list = data || [];
-      setOrders(list);
-      const ids = list.map(o => o.id);
-      if (ids.length) {
-        fetchMyShipments(ids).then(({ data: shipments }) => {
-          const map = {};
-          (shipments || []).forEach(s => { map[s.order_id] = s; });
-          setShipmentsByOrder(map);
-        });
-      }
+    // Best-effort and silent on failure — this account's own orders
+    // (the fetchOrders() call right after) load normally either way,
+    // this just means a guest order placed under this same email
+    // separately from any specific "sign in to add this order" link
+    // still ends up here without the visitor needing to do anything
+    // else about it.
+    attachMyGuestOrders().catch(() => {}).finally(() => {
+      fetchOrders().then(({ data }) => {
+        const list = data || [];
+        setOrders(list);
+        const ids = list.map(o => o.id);
+        if (ids.length) {
+          fetchMyShipments(ids).then(({ data: shipments }) => {
+            const map = {};
+            (shipments || []).forEach(s => { map[s.order_id] = s; });
+            setShipmentsByOrder(map);
+          });
+        }
+      });
     });
   }, [user]);
 

@@ -59,9 +59,21 @@ export async function getRequestUser(req: Request) {
     global: { headers: { Authorization: authHeader } },
     auth: { persistSession: false },
   });
-  const { data, error } = await client.auth.getUser();
-  if (error || !data?.user) return { user: null, error: error?.message || 'Not authenticated' };
-  return { user: data.user, error: null };
+  try {
+    const { data, error } = await client.auth.getUser();
+    if (error || !data?.user) return { user: null, error: error?.message || 'Not authenticated' };
+    return { user: data.user, error: null };
+  } catch (err) {
+    // auth.getUser() THROWS (rather than returning a clean error
+    // object) for a token it can't parse as a real user session — the
+    // anon key every guest request sends is exactly this case: it's a
+    // real JWT, but a project-level API key, not a user session token,
+    // so it has no `sub` (user id) claim at all. That's "invalid
+    // claim: missing sub claim" specifically. Treating it the same as
+    // any other failed lookup — no user, not a crash — is what makes
+    // every guest-checkout code path that calls this actually work.
+    return { user: null, error: err instanceof Error ? err.message : 'Not authenticated' };
+  }
 }
 
 // ═══ check-payment-status/index.ts (entry point) ═══

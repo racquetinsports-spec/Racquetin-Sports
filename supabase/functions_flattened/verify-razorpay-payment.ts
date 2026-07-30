@@ -59,9 +59,21 @@ export async function getRequestUser(req: Request) {
     global: { headers: { Authorization: authHeader } },
     auth: { persistSession: false },
   });
-  const { data, error } = await client.auth.getUser();
-  if (error || !data?.user) return { user: null, error: error?.message || 'Not authenticated' };
-  return { user: data.user, error: null };
+  try {
+    const { data, error } = await client.auth.getUser();
+    if (error || !data?.user) return { user: null, error: error?.message || 'Not authenticated' };
+    return { user: data.user, error: null };
+  } catch (err) {
+    // auth.getUser() THROWS (rather than returning a clean error
+    // object) for a token it can't parse as a real user session — the
+    // anon key every guest request sends is exactly this case: it's a
+    // real JWT, but a project-level API key, not a user session token,
+    // so it has no `sub` (user id) claim at all. That's "invalid
+    // claim: missing sub claim" specifically. Treating it the same as
+    // any other failed lookup — no user, not a crash — is what makes
+    // every guest-checkout code path that calls this actually work.
+    return { user: null, error: err instanceof Error ? err.message : 'Not authenticated' };
+  }
 }
 
 // ═══ inlined: _shared/razorpay.ts ═══
@@ -598,8 +610,14 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   try {
-    const { user, error: authError } = await getRequestUser(req);
-    if (!user) return jsonResponse({ error: authError || 'Not authenticated' }, 401);
+    // Optional — a guest checkout has no session to check at all. When
+    // the intent DOES belong to a registered user, the ownership check
+    // below still requires a real, matching session; this alone is not
+    // the security boundary for the guest case, the signature check
+    // above already is (an attacker can't produce a valid Razorpay
+    // signature for someone else's order+payment id pair without
+    // having actually completed that specific payment).
+    const { user } = await getRequestUser(req);
 
     const body = await req.json();
     const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = body || {};
@@ -630,7 +648,7 @@ Deno.serve(async (req) => {
       .eq('provider_order_id', razorpay_order_id)
       .maybeSingle();
     if (!intent) return jsonResponse({ error: 'No matching order found for this payment' }, 404);
-    if (intent.user_id !== user.id) return jsonResponse({ error: 'This payment does not belong to your account' }, 403);
+    if (intent.user_id && intent.user_id !== user?.id) return jsonResponse({ error: 'This payment does not belong to your account' }, 403);
 
     // 2. Re-confirm with Razorpay directly — belt and suspenders beyond
     //    the signature check, per Razorpay's own recommendation.

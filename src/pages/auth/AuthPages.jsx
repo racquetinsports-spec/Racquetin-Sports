@@ -161,7 +161,7 @@ export function RegisterPage() {
     e.preventDefault();
     if (password.length < 8) return setError('Password must be at least 8 characters.');
     setError(''); setLoading(true);
-    const { error: err } = await signUp({ email, password, name });
+    const { error: err } = await signUp({ email, password, name, redirect });
     setLoading(false);
     if (err) return setError(err.message);
     trackSignUp('email');
@@ -332,7 +332,12 @@ export function AuthCallback() {
 
         if (session) {
           if (!cancelled) setStatus('success');
-          setTimeout(() => { if (!cancelled) navigate(redirect === 'checkout' ? '/checkout' : '/account'); }, 1500);
+          setTimeout(() => {
+            if (cancelled) return;
+            if (redirect === 'checkout') navigate('/checkout');
+            else if (redirect?.startsWith('order/')) navigate(`/order-confirmation/${redirect.slice(6)}?attach=1`);
+            else navigate('/account');
+          }, 1500);
         } else {
           if (!cancelled) {
             setStatus('error');

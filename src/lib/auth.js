@@ -6,13 +6,13 @@ import { supabase, isSupabaseConfigured } from './supabase';
 
 // ── Customer Auth ─────────────────────────────────────────────────
 
-export async function signUp({ email, password, name }) {
+export async function signUp({ email, password, name, redirect }) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: { full_name: name },
-      emailRedirectTo: `${window.location.origin}/auth/callback`,
+      emailRedirectTo: `${window.location.origin}/auth/callback${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`,
     },
   });
   return { data, error };
