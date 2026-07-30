@@ -129,8 +129,12 @@ export async function fulfillOrderFromIntent({
 
   // 6. Clear the cart server-side (the client also clears its own local
   //    state on success, but doing it here too means the cart is empty
-  //    even if the client never gets to run that code).
-  await admin.from('cart_items').delete().eq('user_id', intent.user_id);
+  //    even if the client never gets to run that code). Guests never had
+  //    a server-side cart_items row in the first place — only registered
+  //    users do — so there's nothing to clear for them.
+  if (intent.user_id) {
+    await admin.from('cart_items').delete().eq('user_id', intent.user_id);
+  }
 
   // 7. Mark the intent consumed so a duplicate webhook/verify call is a no-op.
   await admin.from('payment_intents').update({ status: 'consumed', consumed_at: new Date().toISOString() }).eq('id', intent.id);
@@ -145,27 +149,49 @@ export async function fulfillOrderFromIntent({
   let emailSent = false;
   let emailError: string | null = null;
   try {
-    const { data: customer, error: customerError } = await admin
-      .from('customers')
-      .select('email, full_name')
-      .eq('user_id', intent.user_id)
-      .maybeSingle();
+    // Guest orders (intent.user_id null) can never have a `customers`
+    // row — customers.user_id is NOT NULL UNIQUE, so a guest simply
+    // has no row to find there. Unmodified, this always failed for
+    // guests specifically, silently breaking confirmation email for
+    // exactly the customers this feature exists to serve. Falls back
+    // to the shipping_address snapshot instead — the same place
+    // OrderDetailPage already reads guest contact info from for display.
+    let recipientEmail: string | null = null;
+    let recipientName: string | null = null;
 
-    if (customerError) {
-      emailError = `Could not look up customer: ${customerError.message}`;
-    } else if (!customer?.email) {
-      emailError = `No customers row (or no email on it) for user_id ${intent.user_id}`;
+    if (intent.user_id) {
+      const { data: customer, error: customerError } = await admin
+        .from('customers')
+        .select('email, full_name')
+        .eq('user_id', intent.user_id)
+        .maybeSingle();
+
+      if (customerError) {
+        emailError = `Could not look up customer: ${customerError.message}`;
+      } else if (!customer?.email) {
+        emailError = `No customers row (or no email on it) for user_id ${intent.user_id}`;
+      } else {
+        recipientEmail = customer.email;
+        recipientName = customer.full_name;
+      }
     } else {
+      const addr = (intent.shipping_address || {}) as Record<string, string>;
+      recipientEmail = addr.email || intent.guest_email || null;
+      recipientName = [addr.firstName, addr.lastName].filter(Boolean).join(' ') || null;
+      if (!recipientEmail) emailError = 'Guest order has no email on its shipping address or intent';
+    }
+
+    if (recipientEmail) {
       const result = await sendEmailIdempotent({
         admin,
         idempotencyKey: `order_confirmation:${order.id}`,
         emailType: 'order_confirmation',
-        recipient: customer.email,
+        recipient: recipientEmail,
         customerId: intent.user_id,
         orderId: order.id,
         send: () => sendOrderConfirmationEmail({
-          toEmail: customer.email,
-          toName: customer.full_name,
+          toEmail: recipientEmail!,
+          toName: recipientName,
           order: { order_number: order.order_number, total: order.total, payment_method: paymentMethod, created_at: order.created_at },
           items: items.map(i => ({ name: i.name, price: i.price, qty: i.qty })),
         }),

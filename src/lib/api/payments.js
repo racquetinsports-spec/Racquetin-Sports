@@ -43,13 +43,25 @@ async function extractFunctionError(error, fallback) {
 // ── Step 1: ask the server to price the cart and create a Razorpay order ──
 // items: [{ productId, qty, variant }] — price is NOT sent; the server
 // re-looks-up every product's current price and ignores anything else.
-export async function createRazorpayOrder({ items, shippingAddress, billingAddress, couponCode }) {
+export async function createRazorpayOrder({ items, shippingAddress, billingAddress, couponCode, guestEmail }) {
   const { data, error } = await supabase.functions.invoke('create-razorpay-order', {
-    body: { items, shippingAddress, billingAddress, couponCode },
+    body: { items, shippingAddress, billingAddress, couponCode, guestEmail },
   });
   if (error) return { data: null, error: { message: await extractFunctionError(error, 'Could not start checkout') } };
   if (data?.error) return { data: null, error: { message: data.error } };
   return { data, error: null };
+}
+
+// Minimal existence check for the returning-customer email UX —
+// returns {exists: boolean} only, nothing else. Never throws on a
+// "no account" result; only a genuine request failure returns an error.
+export async function checkEmailExists(email) {
+  const { data, error } = await supabase.functions.invoke('check-email-exists', {
+    body: { email },
+  });
+  if (error) return { exists: false, error: await extractFunctionError(error, 'Could not check email') };
+  if (data?.error) return { exists: false, error: data.error };
+  return { exists: !!data?.exists, error: null };
 }
 
 // ── Step 2: after Razorpay's checkout modal succeeds, ask the server

@@ -191,7 +191,8 @@ export function AdminPagesStyles() {
       .aor-cell-center { align-items:center; text-align:center; }
       .aor-cell-actions { align-items:flex-end; }
       .aor-order-number { font-size:13px; font-weight:600; }
-      .aor-customer-name { font-size:13px; font-weight:600; }
+      .aor-customer-name { font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px; }
+      .aor-guest-badge { font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--gr-2); background:var(--gr-6); border:1px solid var(--gr-4); border-radius:100px; padding:1px 7px; }
       .aor-amount { font-size:14px; font-weight:700; }
       .aor-pill { font-size:11px; font-weight:700; letter-spacing:.03em; text-transform:capitalize; padding:5px 12px; border-radius:100px; }
       .aor-status-select { font-size:11px; font-weight:600; text-transform:capitalize; padding:6px 10px; border-radius:100px; cursor:pointer; }

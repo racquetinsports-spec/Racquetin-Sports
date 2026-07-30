@@ -8,6 +8,18 @@
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { getUser } from '../auth';
 
+// Requires the caller to actually be signed in — see attach-guest-order's
+// own comments for why this is the one function in this file that's
+// allowed to require that.
+export async function attachGuestOrder(orderId) {
+  const { data, error } = await supabase.functions.invoke('attach-guest-order', {
+    body: { orderId },
+  });
+  if (error) return { attached: false, error: error.message || 'Could not attach order' };
+  if (data?.error) return { attached: false, error: data.error };
+  return { attached: !!data?.attached, error: null };
+}
+
 export async function fetchOrders() {
   const { user } = await getUser();
   if (!user || !isSupabaseConfigured()) return { data: [], error: null };
@@ -19,16 +31,21 @@ export async function fetchOrders() {
   return { data: data || [], error };
 }
 
+// Routes through a server-side function rather than a direct client
+// query — the direct query approach used to short-circuit to
+// {data: null} for any guest (no `user` at all) before even
+// attempting a fetch, and even setting that aside, orders_own's RLS
+// policy (user_id = auth.uid()) can never match a guest order's null
+// user_id against a guest's null auth.uid() either — NULL = NULL is
+// not true in Postgres. The Edge Function handles both registered and
+// guest orders through one consistent, correct authorization check.
 export async function fetchOrderById(orderId) {
-  const { user } = await getUser();
-  if (!user || !isSupabaseConfigured()) return { data: null, error: null };
-  const { data, error } = await supabase
-    .from('orders')
-    .select(`*, order_items(*, product:product_id(name, slug, brand, category_slug, product_images(url, is_primary))), payments(*), shipments(*)`)
-    .eq('id', orderId)
-    .eq('user_id', user.id)
-    .single();
-  return { data, error };
+  if (!isSupabaseConfigured()) return { data: null, error: null };
+  const { data, error } = await supabase.functions.invoke('fetch-order', {
+    body: { orderId },
+  });
+  if (error) return { data: null, error };
+  return { data: data?.data || null, error: data?.error || null };
 }
 
 // ── Admin order management ────────────────────────────────────────

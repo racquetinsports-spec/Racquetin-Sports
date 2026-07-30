@@ -5,9 +5,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useCart } from '../hooks/useCart';
 import { useWishlist } from '../hooks/useWishlist';
 import { useAuth } from '../hooks/useAuth';
-import { signOut } from '../lib/auth';
-import { initiatePayment, createRazorpayOrder, verifyRazorpayPayment, loadRazorpayScript, checkPaymentStatus } from '../lib/api/payments';
-import { fetchOrders, fetchOrderById } from '../lib/api/orders';
+import { signOut, signIn } from '../lib/auth';
+import { initiatePayment, createRazorpayOrder, verifyRazorpayPayment, loadRazorpayScript, checkPaymentStatus, checkEmailExists } from '../lib/api/payments';
+import { fetchOrders, fetchOrderById, attachGuestOrder } from '../lib/api/orders';
 import { fetchMyShipments } from '../lib/api/shipments';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { fetchProducts, fetchProductsByIds } from '../lib/api/products';
@@ -178,6 +178,45 @@ export function CheckoutPage() {
     firstName: '', lastName: '', email: user?.email || '', phone: '',
     address1: '', address2: '', city: '', state: '', postcode: '', country: 'India',
   });
+  // Returning-customer email UX (guest checkout) — none of this ever
+  // blocks or redirects; it's purely an optional suggestion layered on
+  // top of a form that works fine either way.
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const [existingAccountEmail, setExistingAccountEmail] = useState(null); // email confirmed to have an account
+  const [suggestionDismissedFor, setSuggestionDismissedFor] = useState(null); // email the visitor already dismissed / chose guest for
+  const [showInlineSignIn, setShowInlineSignIn] = useState(false);
+  const [signInPassword, setSignInPassword] = useState('');
+  const [signInError, setSignInError] = useState('');
+  const [signInLoading, setSignInLoading] = useState(false);
+
+  useEffect(() => {
+    if (user) return; // already signed in — nothing to suggest
+    const email = form.email.trim().toLowerCase();
+    if (!EMAIL_RE.test(email) || email === suggestionDismissedFor) {
+      setExistingAccountEmail(null);
+      return;
+    }
+    const t = setTimeout(async () => {
+      const { exists } = await checkEmailExists(email);
+      setExistingAccountEmail(exists ? email : null);
+    }, 600); // debounced — no need to check on every keystroke
+    return () => clearTimeout(t);
+  }, [form.email, user, suggestionDismissedFor]);
+
+  async function handleInlineSignIn(e) {
+    e.preventDefault();
+    setSignInError('');
+    setSignInLoading(true);
+    const { error: signInErr } = await signIn({ email: form.email.trim(), password: signInPassword });
+    setSignInLoading(false);
+    if (signInErr) { setSignInError(signInErr.message || 'Could not sign in.'); return; }
+    // No navigation, no reload — useAuth() picks up the new session via
+    // Supabase's own onAuthStateChange listener, and this component
+    // stays mounted throughout, so cart, coupon, and every field
+    // already filled in on this form are simply still there.
+    setShowInlineSignIn(false);
+    setSignInPassword('');
+  }
   const [delivery, setDelivery] = useState('std');
   const handleDeliveryChange = (id) => {
     setDelivery(id);
@@ -259,7 +298,7 @@ export function CheckoutPage() {
 
   async function handleCompleteOrder() {
     setError('');
-    if (!user) { navigate('/auth/login?redirect=checkout'); return; }
+    if (!user && !EMAIL_RE.test(form.email.trim())) { setError('Please enter a valid email address.'); return; }
     if (!requiredFilled) { setError('Please fill in all required fields.'); return; }
     if (!isSupabaseConfigured()) {
       // No backend configured yet — nothing to persist to, keep the old demo behaviour.
@@ -279,6 +318,7 @@ export function CheckoutPage() {
     const { data: rpOrder, error: createError } = await createRazorpayOrder({
       items: items.map(i => ({ productId: i.product.id, qty: i.qty, variant: i.variant, variantId: i.variantId })),
       shippingAddress: { ...form, delivery },
+      guestEmail: user ? undefined : form.email.trim(),
     });
     if (createError) { setError(createError.message || 'Could not start checkout.'); setSubmitting(false); return; }
     pendingOrderIdRef.current = rpOrder.order_id;
@@ -344,6 +384,46 @@ export function CheckoutPage() {
               <input className="input" placeholder="Last name" value={form.lastName} onChange={set('lastName')} />
             </div>
             <input className="input" placeholder="Email address" style={{ marginTop: 12 }} value={form.email} onChange={set('email')} />
+            {!user && existingAccountEmail && existingAccountEmail === form.email.trim().toLowerCase() && (
+              <div className="checkout-signin-suggestion">
+                {!showInlineSignIn ? (
+                  <>
+                    <p className="t-small">
+                      Already have an account? Sign in to use your saved addresses and view your order history, or continue as a guest.
+                    </p>
+                    <div className="checkout-signin-actions">
+                      <button type="button" className="btn btn-outline btn-sm" onClick={() => setShowInlineSignIn(true)}>Sign In</button>
+                      <button
+                        type="button"
+                        className="btn-text-sm"
+                        onClick={() => { setSuggestionDismissedFor(form.email.trim().toLowerCase()); setExistingAccountEmail(null); }}
+                      >
+                        Continue as Guest
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <form onSubmit={handleInlineSignIn} className="checkout-signin-form">
+                    <p className="t-small" style={{ marginBottom: 10 }}>Sign in as {form.email.trim()}</p>
+                    <input
+                      className="input"
+                      type="password"
+                      placeholder="Password"
+                      value={signInPassword}
+                      onChange={e => setSignInPassword(e.target.value)}
+                      autoFocus
+                    />
+                    {signInError && <p className="t-small" style={{ color: 'var(--cr)', marginTop: 8 }}>{signInError}</p>}
+                    <div className="checkout-signin-actions" style={{ marginTop: 10 }}>
+                      <button type="submit" className="btn btn-primary btn-sm" disabled={signInLoading || !signInPassword}>
+                        {signInLoading ? 'Signing in…' : 'Sign In'}
+                      </button>
+                      <button type="button" className="btn-text-sm" onClick={() => { setShowInlineSignIn(false); setSignInError(''); }}>Cancel</button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
             <input className="input" placeholder="Phone number" style={{ marginTop: 12 }} type="tel" inputMode="numeric" maxLength={10} value={form.phone} onChange={setDigits('phone', 10)} />
           </div>
           <div className="checkout-section">
@@ -444,7 +524,15 @@ export function CheckoutPage() {
         .checkout-summary{background:var(--gr-6);padding:28px;border-radius:var(--r);position:sticky;top:80px;}
         .delivery-option{display:flex;align-items:center;gap:14px;padding:14px;border:1.5px solid var(--gr-4);border-radius:var(--r-sm);margin-bottom:8px;cursor:pointer;transition:var(--trans);}
         .delivery-option:hover{border-color:var(--bk);}
+        .checkout-signin-suggestion{margin-top:10px;padding:14px 16px;background:var(--gr-6);border:1px solid var(--gr-5);border-radius:var(--r-sm);}
+        .checkout-signin-suggestion p{color:var(--gr-1);line-height:1.5;}
+        .checkout-signin-actions{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;}
+        .checkout-signin-form input{margin-top:0;}
+        .btn-text-sm{font-size:12px;font-weight:500;color:var(--gr-2);text-decoration:underline;background:none;border:none;cursor:pointer;padding:6px 4px;}
+        .btn-text-sm:hover{color:var(--bk);}
+        .btn-text-sm:focus-visible,.checkout-signin-actions .btn:focus-visible{outline:2px solid var(--cr);outline-offset:2px;}
         @media(max-width:860px){.checkout-layout{grid-template-columns:1fr;}}
+        @media(max-width:480px){.checkout-signin-actions{flex-direction:column;align-items:stretch;} .checkout-signin-actions .btn{width:100%;}}
       `}</style>
     </div>
   );
@@ -456,9 +544,12 @@ export function CheckoutPage() {
 // that fabricates one of these.
 export function OrderConfirmationPage() {
   const { orderId } = useParams();
+  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [attachState, setAttachState] = useState(null); // null | 'attaching' | 'attached' | 'error'
 
   useEffect(() => {
     let cancelled = false;
@@ -508,6 +599,24 @@ export function OrderConfirmationPage() {
     return () => { cancelled = true; };
   }, [orderId]);
 
+  // Runs once, only for the specific "just signed in to claim this
+  // order" return trip (see the redirect=order/{id} handling in
+  // LoginPage) — not on every visit, and never for an order that
+  // already has an owner.
+  useEffect(() => {
+    if (searchParams.get('attach') !== '1' || !user || !order || order.user_id || attachState) return;
+    setAttachState('attaching');
+    attachGuestOrder(order.id).then(({ attached, error }) => {
+      if (attached) {
+        setAttachState('attached');
+        setOrder(o => ({ ...o, user_id: user.id }));
+      } else {
+        setAttachState('error');
+        console.error('[order-confirmation] could not attach guest order:', error);
+      }
+    });
+  }, [searchParams, user, order, attachState]);
+
   const deliveryEstimate = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)
     .toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -539,6 +648,18 @@ export function OrderConfirmationPage() {
           <div className="oc-row"><span>Payment Method</span><span className="oc-value" style={{ textTransform: 'capitalize' }}>{order.payment_method || payment?.payment_method || '—'}</span></div>
           <div className="oc-row"><span>Estimated Delivery</span><span className="oc-value">{deliveryEstimate}</span></div>
         </div>
+
+        {!order.user_id && !user && (
+          <p className="t-small" style={{ marginTop: 20, color: 'var(--gr-2)' }}>
+            <Link to={`/auth/login?redirect=order/${order.id}`}>Sign in</Link> to securely add this order to your account.
+          </p>
+        )}
+        {attachState === 'attaching' && (
+          <p className="t-small" style={{ marginTop: 20, color: 'var(--gr-2)' }}>Adding this order to your account…</p>
+        )}
+        {attachState === 'attached' && (
+          <p className="t-small" style={{ marginTop: 20, color: 'var(--cr)' }}>✓ This order has been added to your account.</p>
+        )}
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 32 }}>
           <Link to="/rackets" className="btn btn-outline btn-lg">Continue Shopping</Link>

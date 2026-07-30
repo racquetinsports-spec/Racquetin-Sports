@@ -30,6 +30,7 @@ export function AdminOrdersPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
+  const [customerTypeFilter, setCustomerTypeFilter] = useState(''); // '' | 'guest' | 'registered'
   const [sort, setSort] = useState('newest');
   const [pending, setPending] = useState(() => new Set());
   const [paymentModalOrder, setPaymentModalOrder] = useState(null);
@@ -55,10 +56,16 @@ export function AdminOrdersPage() {
       list = list.filter(o =>
         o.order_number?.toLowerCase().includes(q) ||
         o.customers?.full_name?.toLowerCase().includes(q) ||
-        o.customers?.email?.toLowerCase().includes(q)
+        o.customers?.email?.toLowerCase().includes(q) ||
+        // customers is always null for a guest order — without this,
+        // searching for a guest's own name/email found nothing at all.
+        [o.shipping_address?.firstName, o.shipping_address?.lastName].filter(Boolean).join(' ').toLowerCase().includes(q) ||
+        o.shipping_address?.email?.toLowerCase().includes(q)
       );
     }
     if (paymentFilter) list = list.filter(o => o.payment_status === paymentFilter);
+    if (customerTypeFilter === 'guest') list = list.filter(o => !o.user_id);
+    else if (customerTypeFilter === 'registered') list = list.filter(o => !!o.user_id);
     return [...list].sort((a, b) => {
       switch (sort) {
         case 'amount-desc': return b.total - a.total;
@@ -66,7 +73,7 @@ export function AdminOrdersPage() {
         default: return new Date(b.created_at) - new Date(a.created_at);
       }
     });
-  }, [orders, search, paymentFilter, sort]);
+  }, [orders, search, paymentFilter, customerTypeFilter, sort]);
 
   return (
     <div className="admin-page">
@@ -90,6 +97,11 @@ export function AdminOrdersPage() {
           <select className="select" value={paymentFilter} onChange={e => setPaymentFilter(e.target.value)}>
             <option value="">All Payments</option>
             {Object.keys(PAYMENT_STATUS_COLORS).map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+          </select>
+          <select className="select" value={customerTypeFilter} onChange={e => setCustomerTypeFilter(e.target.value)}>
+            <option value="">All Customers</option>
+            <option value="registered">Registered</option>
+            <option value="guest">Guest</option>
           </select>
           <select className="select" value={sort} onChange={e => setSort(e.target.value)}>
             {ORDER_SORTS.map(s => <option key={s.value} value={s.value}>Sort: {s.label}</option>)}
@@ -117,8 +129,11 @@ export function AdminOrdersPage() {
               </div>
 
               <div className="aor-cell">
-                <div className="aor-customer-name">{o.customers?.full_name || '—'}</div>
-                <div className="admin-muted t-small">{o.customers?.email || ''}</div>
+                <div className="aor-customer-name">
+                  {o.customers?.full_name || [o.shipping_address?.firstName, o.shipping_address?.lastName].filter(Boolean).join(' ') || '—'}
+                  {!o.user_id && <span className="aor-guest-badge">Guest</span>}
+                </div>
+                <div className="admin-muted t-small">{o.customers?.email || o.shipping_address?.email || ''}</div>
               </div>
 
               <div className="aor-cell aor-cell-center">

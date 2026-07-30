@@ -112,7 +112,9 @@ export function LoginPage() {
     setLoading(false);
     if (err) return setError(err.message);
     trackLogin('email');
-    nav(redirect === 'checkout' ? '/checkout' : '/account');
+    if (redirect === 'checkout') nav('/checkout');
+    else if (redirect?.startsWith('order/')) nav(`/order-confirmation/${redirect.slice(6)}?attach=1`);
+    else nav('/account');
   }
 
   return (

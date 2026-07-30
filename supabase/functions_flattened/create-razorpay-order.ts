@@ -136,8 +136,9 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 // ═══ create-razorpay-order/index.ts (entry point) ═══
 // ── create-razorpay-order ─────────────────────────────────────────
-// POST body: { items: [{ productId, qty, variant? }], shippingAddress, billingAddress?, couponCode? }
-// Requires: Authorization: Bearer <user's Supabase access token>
+// POST body: { items: [{ productId, qty, variant? }], shippingAddress, billingAddress?, couponCode?, guestEmail? }
+// Requires EITHER: Authorization: Bearer <user's Supabase access token>
+//               OR: a valid guestEmail in the body (guest checkout)
 //
 // Never trusts a price, subtotal, tax, or shipping figure from the
 // client — every item's price is re-looked-up from the `products`
@@ -146,6 +147,8 @@ function timingSafeEqual(a: string, b: string): boolean {
 // Checkout; nothing is written to `orders` yet (see payment_intents).
 
 
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // TAX_RATE/FREE_SHIPPING_THRESHOLD/SHIPPING_COST are documented (and
 // read from .env.example) as paise, matching Razorpay's own convention —
@@ -168,10 +171,21 @@ Deno.serve(async (req) => {
 
   try {
     const { user, error: authError } = await getRequestUser(req);
-    if (!user) return jsonResponse({ error: authError || 'Not authenticated' }, 401);
 
     const body = await req.json();
-    const { items, shippingAddress, billingAddress, couponCode } = body || {};
+    const { items, shippingAddress, billingAddress, couponCode, guestEmail: rawGuestEmail } = body || {};
+
+    // Guest path: no session, but a usable email was provided instead.
+    // Normalized the same way the account-existence-check function
+    // normalizes it, so the two agree on what "the same email" means
+    // later (case/whitespace variations shouldn't create two identities).
+    let guestEmail: string | null = null;
+    if (!user) {
+      guestEmail = typeof rawGuestEmail === 'string' ? rawGuestEmail.trim().toLowerCase() : '';
+      if (!guestEmail || !EMAIL_RE.test(guestEmail)) {
+        return jsonResponse({ error: authError && !rawGuestEmail ? 'Sign in, or provide a valid email to continue as a guest.' : 'A valid email address is required' }, 400);
+      }
+    }
 
     if (!Array.isArray(items) || items.length === 0) {
       return jsonResponse({ error: 'No items provided' }, 400);
@@ -311,16 +325,18 @@ Deno.serve(async (req) => {
 
     // Razorpay order amount/currency are what the customer will actually
     // be charged — this is the number that matters, computed above.
-    const receipt = `ri_${Date.now()}_${user.id.slice(0, 8)}`;
+    const receiptId = user ? user.id.slice(0, 8) : 'guest';
+    const receipt = `ri_${Date.now()}_${receiptId}`;
     const razorpayOrder = await createRazorpayOrder({
       amount: total,
       currency: 'INR',
       receipt,
-      notes: { user_id: user.id },
+      notes: user ? { user_id: user.id } : { guest_email: guestEmail! },
     });
 
     const { error: intentError } = await admin.from('payment_intents').insert([{
-      user_id: user.id,
+      user_id: user ? user.id : null,
+      guest_email: user ? null : guestEmail,
       provider: 'razorpay',
       provider_order_id: razorpayOrder.id,
       items: pricedItems,
