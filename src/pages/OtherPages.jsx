@@ -373,7 +373,8 @@ export function CheckoutPage() {
           {!user && (
             <div style={{ padding: '14px 16px', background: 'var(--gr-6)', borderRadius: 'var(--r)', marginBottom: 24 }}>
               <p className="t-small">
-                <Link to="/auth/login?redirect=checkout" style={{ color: 'var(--cr)', fontWeight: 600 }}>Sign in</Link> to complete your order — your cart will carry over.
+                You can check out as a guest — no account needed.{' '}
+                <Link to="/auth/login?redirect=checkout" style={{ color: 'var(--cr)', fontWeight: 600 }}>Sign in</Link> to save this order to your account and reuse your details next time.
               </p>
             </div>
           )}
